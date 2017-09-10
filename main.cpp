@@ -112,7 +112,7 @@ main( int     argc,
   char*         json;
 
 
-  if ( argc <= 3 )
+  if ( argc < 3 )
   {
     fprintf ( stderr, "usage: %s font_file.ttf sample-text json|text\n", argv[0] );
     exit( 1 );
