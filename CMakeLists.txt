@@ -44,7 +44,7 @@ if(Boost_FOUND)
 endif()
 
 # Freetype
-find_package(freetype REQUIRED)
+find_package(Freetype REQUIRED)
 
 add_executable (renderText main.cpp ${CMAKE_CURRENT_SOURCE_DIR})
 #target_include_directories (ParseFast PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/DataStructureAndEncodingDefinition ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/Source/MediaStorageAndFileFormat/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/Source/InformationObjectDefinition/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/Source/DataDictionary/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/bin/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/Source/DataStructureAndEncodingDefinition ${LIBXML2_INCLUDE_DIR})
