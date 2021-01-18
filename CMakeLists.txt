@@ -35,7 +35,7 @@ FIND_PACKAGE(GDCM REQUIRED)
 
 
 # Boost
-set(boost_min_ver 1.50.0)
+set(boost_min_ver 1.70.0)
 set(boost_libs system filesystem timer date_time)
 find_package(Boost ${boost_min_ver})
 
