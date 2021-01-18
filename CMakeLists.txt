@@ -43,9 +43,12 @@ if(Boost_FOUND)
     find_package(Boost ${boost_min_ver} COMPONENTS ${boost_libs})
 endif()
 
+# Freetype
+find_package(freetype REQUIRED)
+
 add_executable (renderText main.cpp ${CMAKE_CURRENT_SOURCE_DIR})
 #target_include_directories (ParseFast PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/DataStructureAndEncodingDefinition ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/Source/MediaStorageAndFileFormat/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/Source/InformationObjectDefinition/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/Source/DataDictionary/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/bin/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.8/Source/DataStructureAndEncodingDefinition ${LIBXML2_INCLUDE_DIR})
-target_include_directories (renderText PUBLIC ${GDCM_BINARY_DIR}/Source/Common ${GDCM_SOURCE_DIR}/Source/Common ${GDCM_SOURCE_DIR}/Source/MediaStorageAndFileFormat ${LIBXML2_INCLUDE_DIR})
+target_include_directories (renderText PUBLIC ${GDCM_BINARY_DIR}/Source/Common ${GDCM_SOURCE_DIR}/Source/Common ${GDCM_SOURCE_DIR}/Source/MediaStorageAndFileFormat ${LIBXML2_INCLUDE_DIR} ${FREETYPE_INCLUDE_DIRS})
 
 
 #SET(GDCM_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/bin)
@@ -67,4 +70,4 @@ target_include_directories (renderText PUBLIC ${GDCM_BINARY_DIR}/Source/Common $
 #message(STATUS MSFF_LIBRARY = ${MSFF_LIBRARY})
 #message(STATUS MEXD_LIBRARY = ${MEXD_LIBRARY})
 
-target_link_libraries(renderText gdcmCommon gdcmMEXD gdcmMEXD gdcmMSFF gdcmDICT gdcmDSED ${LIBXML2_LIBRARY} ${JPEG_LIBRARY} ${ZLIB_LIBRARY} ${XLST_LIBRARY} ${Boost_LIBRARIES} pthread)
+target_link_libraries(renderText gdcmCommon gdcmMEXD gdcmMEXD gdcmMSFF gdcmDICT gdcmDSED ${LIBXML2_LIBRARY} ${JPEG_LIBRARY} ${ZLIB_LIBRARY} ${XLST_LIBRARY} ${Boost_LIBRARIES} ${FREETYPE_LIBRARIES} pthread)
