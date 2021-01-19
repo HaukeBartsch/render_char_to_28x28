@@ -3,62 +3,140 @@
     "description": "Describe a sequence that will be sufficient to generate an image with burned in information.",
     "logic": {
         "font": [
-            { "name": "Arial" },
-            { "name": "Courier" }
+            {
+                "name": "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
+            }
         ],
         "color": [
-            { "name": "yellow", "color": [ 123, 144, 0 ] }
-            { "name": "red", "color": [ 123, 44, 0 ] }
+            {
+                "name": "yellow",
+                "color": [
+                    123,
+                    144,
+                    0
+                ]
+            },
+            {
+                "name": "red",
+                "color": [
+                    123,
+                    44,
+                    0
+                ]
+            }
         ],
         "placement": {
             "top-left": {
-                "x": [0.05],
-                "y": [0.05],
-                "repeat-spacing": [1, 2], 
-                "how-many": [1, 6],
-                "types": [ "Date", "Name", "SeriesDescription" ]
+                "x": [
+                    0.05
+                ],
+                "y": [
+                    0.05
+                ],
+                "repeat-spacing": [
+                    1,
+                    2
+                ],
+                "how-many": [
+                    1,
+                    6
+                ],
+                "types": [
+                    "Date",
+                    "Name",
+                    "SeriesDescription"
+                ]
             },
             "top-right": {
-                "x": [-0.05],
-                "y": [0.05],
-                "repeat-spacing": [1, 2], 
-                "how-many": [1, 6],
-                "types": [ "Date", "Name", "SeriesDescription" ]
+                "x": [
+                    -0.05
+                ],
+                "y": [
+                    0.05
+                ],
+                "repeat-spacing": [
+                    1,
+                    2
+                ],
+                "how-many": [
+                    1,
+                    6
+                ],
+                "types": [
+                    "Date",
+                    "Name",
+                    "SeriesDescription"
+                ]
             },
             "bottom-left": {
-                "x": [0.05],
-                "y": [-0.05],
-                "repeat-spacing": [-1, -2], 
-                "how-many": [1, 6],
-                "types": [ "Date", "Name", "SeriesDescription" ]
+                "x": [
+                    0.05
+                ],
+                "y": [
+                    -0.05
+                ],
+                "repeat-spacing": [
+                    -1,
+                    -2
+                ],
+                "how-many": [
+                    1,
+                    6
+                ],
+                "types": [
+                    "Date",
+                    "Name",
+                    "SeriesDescription"
+                ]
             },
             "bottom-right": {
-                "x": [-0.05],
-                "y": [-0.05],
-                "repeat-spacing": [-1, -2], 
-                "how-many": [1, 6],
-                "types": [ "Date", "Name", "SeriesDescription" ]
+                "x": [
+                    -0.05
+                ],
+                "y": [
+                    -0.05
+                ],
+                "repeat-spacing": [
+                    -1,
+                    -2
+                ],
+                "how-many": [
+                    1,
+                    6
+                ],
+                "types": [
+                    "Date",
+                    "Name",
+                    "SeriesDescription"
+                ]
             }
         },
         "line-groups": [
-            { 
-                "spacing-mult": [2, 1.1], 
-                "spacing-offset": [10,5, 20] 
+            {
+                "spacing-mult": [
+                    2,
+                    1.1
+                ],
+                "spacing-offset": [
+                    10,
+                    5,
+                    20
+                ]
             }
         ],
         "types": [
             {
-            "name": "Name",
-            "generator": "[A-Z][a-z,_-]+" 
+                "name": "Name",
+                "generator": "[A-Z][a-z,_-]+"
             },
             {
-            "name": "Date",
-            "generator": "[0-9][0-9][-\/][0-9][0-9][-\/][0-9][0-9][0-9][0-9]"
+                "name": "Date",
+                "generator": "[0-9][0-9][-\/][0-9][0-9][-\/][0-9][0-9][0-9][0-9]"
             },
             {
                 "name": "SeriesDescription",
-                "generator": "[A-Z][a-z]+[ ,.-]+" 
+                "generator": "[A-Z][a-z]+[ ,.-]+"
             }
         ]
-        }
+    }
 }
