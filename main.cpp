@@ -1,6 +1,6 @@
 
 /*
-/renderText -d data -o /tmp/ -c forwardModel.json \
+ ./renderText -d data -o /tmp/ -c forwardModel.json \
                 -t 1
 */
 
@@ -16,6 +16,7 @@
 #include "gdcmAttribute.h"
 #include "gdcmDefs.h"
 #include "gdcmGlobal.h"
+#include "gdcmImage.h"
 #include "gdcmImageChangeTransferSyntax.h"
 #include "gdcmImageReader.h"
 #include "gdcmImageWriter.h"
@@ -195,7 +196,7 @@ int main(int argc, char **argv) {
   std::string dicom_path = "";
   std::string configfile_path = "";
   std::string output = ""; // directory path
-  std::string font_path = "";
+  std::string font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
   int target = 1;
 
   for (option::Option *opt = options[UNKNOWN]; opt; opt = opt->next())
@@ -258,11 +259,18 @@ int main(int argc, char **argv) {
       break;
     }
   }
+  std::string dn = font_path;
+  struct stat buf;
+  if (!(stat(dn.c_str(), &buf) == 0)) {
+    fprintf(stderr,
+            "Error: no font provided. Use the -f option and provide the name of a ttf file.\n");
+    exit(-1);
+  }
 
   // we should parse the config file
   pt::ptree root;
   bool configFileExists = false;
-  std::string dn = configfile_path;
+  dn = configfile_path;
   struct stat stat_buffer;
   if (!(stat(dn.c_str(), &stat_buffer) == 0)) {
     configFileExists = false;
@@ -340,20 +348,23 @@ int main(int argc, char **argv) {
     bool foundDICOM = false;
     int pickImageIdx;
     int maxIter = 10;
-    while (!foundDICOM || maxIter > 0) {
+    while (maxIter > 0) {
       pickImageIdx = std::rand() % files.size();
       reader.SetFileName(files[pickImageIdx].c_str());
+      fprintf(stdout, "Try to read \"%s\"\n", files[pickImageIdx].c_str());
       if (!reader.Read()) {
         maxIter--;
+        fprintf(stdout, "read failed... try next\n");
         continue; // try again
       }
       foundDICOM = true;
+      break;
     }
     if (!foundDICOM) {
       fprintf(stderr, "Error: I tried to find a DICOM image I could read. I could not... ");
       exit(-1);
     } else {
-      fprintf(stdout, "Found \"%s\"\n", files[pickImageIdx].c_str());
+      fprintf(stdout, "  DICOM file: \"%s\"\n", files[pickImageIdx].c_str());
     }
     const gdcm::Image &image = reader.GetImage();
     // we should probably change the transfer syntax here, uncompress JPEG2000 so that
@@ -361,14 +372,13 @@ int main(int argc, char **argv) {
     gdcm::ImageChangeTransferSyntax change;
     // change.SetTransferSyntax(gdcm::TransferSyntax::JPEG2000Lossless);
     // change.SetTransferSyntax(gdcm::TransferSyntax::JPEGLosslessProcess14_1);
-    change.SetTransferSyntax(gdcm::TransferSyntax::ImplicitVRLittleEndian);
+    change.SetTransferSyntax(gdcm::TransferSyntax::ExplicitVRLittleEndian);
     change.SetInput(image);
     bool b = change.Change();
     if (!b) {
       std::cerr << "Could not change the Transfer Syntax" << std::endl;
       return 1;
     }
-
     // unsigned int n_dim = image.GetNumberOfDimensions();
     // const unsigned int *dims = image.GetDimensions();
     // Origin
@@ -380,13 +390,14 @@ int main(int argc, char **argv) {
     const gdcm::Image &change_image = change.GetOutput();
     gdcm::PixelFormat pf = change_image.GetPixelFormat();
     unsigned long len = change_image.GetBufferLength();
-    fprintf(stdout, "Found buffer of length: %ld\n", len);
+    // fprintf(stdout, "Found buffer of length: %ld\n", len);
     char *buffer = new char[len];
 
     change_image.GetBuffer(buffer);
 
     char *text = strdup(generateRandomText(font_length).c_str()); /* second argument    */
     json = (char *)"text";
+    fprintf(stdout, "  text is now: \"%s\"\n", text);
     // if (argc == 4) {
     //  json = argv[3];
     //}
@@ -396,6 +407,10 @@ int main(int argc, char **argv) {
 
     error = FT_Init_FreeType(&library); /* initialize library */
     /* error handling omitted */
+    if (error != 0) {
+      fprintf(stderr, "Error: The freetype libbrary could not be initialized with this font.\n");
+      exit(-1);
+    }
 
     error = FT_New_Face(library, filename, 0, &face); /* create face object */
     /* error handling omitted */
@@ -404,9 +419,17 @@ int main(int argc, char **argv) {
       exit(-1);
     }
 
-    /* use 50pt at 100dpi */
+    /* use 50pt at 100dpi
+    FT_F26Dot6  char_width,
+                    FT_F26Dot6  char_height,
+                    FT_UInt     horz_resolution,
+                    FT_UInt     vert_resolution
+    */
     error = FT_Set_Char_Size(face, 20 * 64, 0, 90, 0); /* set character size */
     /* error handling omitted */
+    if (error != 0) {
+      fprintf(stdout, "we have an error here!\n");
+    }
 
     slot = face->glyph;
 
@@ -448,11 +471,21 @@ int main(int argc, char **argv) {
     //
     // write the image pair
     //
+    dn = output + "/with_text/";
+    // struct stat buf;
+    if (!(stat(dn.c_str(), &buf) == 0)) {
+      mkdir(dn.c_str(), 0777);
+    }
+    dn = output + "/without_text/";
+    if (!(stat(dn.c_str(), &buf) == 0)) {
+      mkdir(dn.c_str(), 0777);
+    }
+
     gdcm::ImageWriter writer;
     writer.SetImage(change.GetOutput());
     writer.SetFile(reader.GetFile());
     char outputfilename[1024];
-    snprintf(outputfilename, 1024 - 1, "%s/%08d_with_text.dcm", output.c_str(), i);
+    snprintf(outputfilename, 1024 - 1, "%s/with_text/%08d.dcm", output.c_str(), i);
     writer.SetFileName(outputfilename);
     if (!writer.Write()) {
       return 1;
@@ -461,7 +494,7 @@ int main(int argc, char **argv) {
     gdcm::ImageWriter writer2;
     writer2.SetImage(change.GetOutput());
     writer2.SetFile(reader.GetFile());
-    snprintf(outputfilename, 1024 - 1, "%s/%08d_without_text.dcm", output.c_str(), i);
+    snprintf(outputfilename, 1024 - 1, "%s/without_text/%08d.dcm", output.c_str(), i);
     writer2.SetFileName(outputfilename);
     if (!writer2.Write()) {
       return 1;
