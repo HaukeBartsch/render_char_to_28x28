@@ -18,6 +18,7 @@
 #include "gdcmGlobal.h"
 #include "gdcmImage.h"
 #include "gdcmImageChangeTransferSyntax.h"
+#include "gdcmImageHelper.h"
 #include "gdcmImageReader.h"
 #include "gdcmImageWriter.h"
 #include "gdcmPhotometricInterpretation.h"
@@ -372,7 +373,7 @@ int main(int argc, char **argv) {
     gdcm::ImageChangeTransferSyntax change;
     // change.SetTransferSyntax(gdcm::TransferSyntax::JPEG2000Lossless);
     // change.SetTransferSyntax(gdcm::TransferSyntax::JPEGLosslessProcess14_1);
-    change.SetTransferSyntax(gdcm::TransferSyntax::ExplicitVRLittleEndian);
+    change.SetTransferSyntax(gdcm::TransferSyntax::ImplicitVRLittleEndian);
     change.SetInput(image);
     bool b = change.Change();
     if (!b) {
@@ -389,6 +390,8 @@ int main(int argc, char **argv) {
     gdcm::DataSet &ds = file.GetDataSet();
     const gdcm::Image &change_image = change.GetOutput();
     gdcm::PixelFormat pf = change_image.GetPixelFormat();
+    unsigned short pixelsize = pf.GetPixelSize();
+    fprintf(stdout, "  pixelsize of input is: %d\n", pixelsize);
     unsigned long len = change_image.GetBufferLength();
     // fprintf(stdout, "Found buffer of length: %ld\n", len);
     char *buffer = new char[len];
@@ -421,9 +424,9 @@ int main(int argc, char **argv) {
 
     /* use 50pt at 100dpi
     FT_F26Dot6  char_width,
-                    FT_F26Dot6  char_height,
-                    FT_UInt     horz_resolution,
-                    FT_UInt     vert_resolution
+                FT_F26Dot6  char_height,
+                FT_UInt     horz_resolution,
+                FT_UInt     vert_resolution
     */
     error = FT_Set_Char_Size(face, 20 * 64, 0, 90, 0); /* set character size */
     /* error handling omitted */
@@ -471,6 +474,12 @@ int main(int argc, char **argv) {
     //
     // write the image pair
     //
+    dn = output;
+    // struct stat buf;
+    if (!(stat(dn.c_str(), &buf) == 0)) {
+      mkdir(dn.c_str(), 0777);
+    }
+
     dn = output + "/with_text/";
     // struct stat buf;
     if (!(stat(dn.c_str(), &buf) == 0)) {
@@ -481,15 +490,7 @@ int main(int argc, char **argv) {
       mkdir(dn.c_str(), 0777);
     }
 
-    gdcm::ImageWriter writer;
-    writer.SetImage(change.GetOutput());
-    writer.SetFile(reader.GetFile());
     char outputfilename[1024];
-    snprintf(outputfilename, 1024 - 1, "%s/with_text/%08d.dcm", output.c_str(), i);
-    writer.SetFileName(outputfilename);
-    if (!writer.Write()) {
-      return 1;
-    }
 
     gdcm::ImageWriter writer2;
     writer2.SetImage(change.GetOutput());
@@ -497,6 +498,38 @@ int main(int argc, char **argv) {
     snprintf(outputfilename, 1024 - 1, "%s/without_text/%08d.dcm", output.c_str(), i);
     writer2.SetFileName(outputfilename);
     if (!writer2.Write()) {
+      return 1;
+    }
+
+    // image dimensions
+    std::vector<unsigned int> extent = gdcm::ImageHelper::GetDimensionsValue(reader.GetFile());
+
+    unsigned short xmax = (unsigned short)extent[0];
+    unsigned short ymax = (unsigned short)extent[1];
+    fprintf(stdout, "dimensions: %d %d\n", xmax, ymax);
+
+    // now we can add the bitmap to the original data and write again
+    // change_image.SetBuffer(buffer);
+    // gdcm::DataElement pixeldata = change_image.GetDataElement();
+    gdcm::DataElement pixeldata(gdcm::Tag(0x7fe0, 0x0010));
+    pixeldata.SetByteValue(buffer, len);
+
+    // delete[] buffer;
+    gdcm::SmartPointer<gdcm::Image> im = new gdcm::Image;
+    im->SetNumberOfDimensions(2);
+    im->SetDimension(0, xmax);
+    im->SetDimension(1, ymax);
+    im->SetPhotometricInterpretation(change_image.GetPhotometricInterpretation());
+
+    // gdcm::Image im = change_image;
+    im->SetDataElement(pixeldata);
+
+    gdcm::ImageWriter writer;
+    writer.SetImage(*im);
+    writer.SetFile(reader.GetFile());
+    snprintf(outputfilename, 1024 - 1, "%s/with_text/%08d.dcm", output.c_str(), i);
+    writer.SetFileName(outputfilename);
+    if (!writer.Write()) {
       return 1;
     }
   }
