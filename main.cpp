@@ -367,14 +367,14 @@ int main(int argc, char **argv) {
     } else {
       fprintf(stdout, "  DICOM file: \"%s\"\n", files[pickImageIdx].c_str());
     }
-    const gdcm::Image &image = reader.GetImage();
+    const gdcm::Image &iimage = reader.GetImage();
     // we should probably change the transfer syntax here, uncompress JPEG2000 so that
     // we can write out the image pair uncompressed...
     gdcm::ImageChangeTransferSyntax change;
     // change.SetTransferSyntax(gdcm::TransferSyntax::JPEG2000Lossless);
     // change.SetTransferSyntax(gdcm::TransferSyntax::JPEGLosslessProcess14_1);
     change.SetTransferSyntax(gdcm::TransferSyntax::ImplicitVRLittleEndian);
-    change.SetInput(image);
+    change.SetInput(iimage);
     bool b = change.Change();
     if (!b) {
       std::cerr << "Could not change the Transfer Syntax" << std::endl;
@@ -508,18 +508,39 @@ int main(int argc, char **argv) {
     unsigned short ymax = (unsigned short)extent[1];
     fprintf(stdout, "dimensions: %d %d\n", xmax, ymax);
 
+    // now copy the string in
+    unsigned short *bvals = (unsigned short *)buffer;
+    for (int yi = 0; yi < HEIGHT; yi++) {
+      for (int xi = 0; xi < WIDTH; xi++) {
+        if (image[yi][xi] == 0)
+          continue;
+        // I would like to copy the value from image over to
+        // the buffer. At some good location...
+        int px = 100;
+        int py = 100;
+        int newx = px + xi;
+        int newy = py + yi;
+        int idx = newx * ymax + newy;
+        if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+          continue;
+        float f = 0.5;
+        bvals[idx] = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image[yi][xi]) / 255.0 * 4096.0));
+      }
+    }
+
     // now we can add the bitmap to the original data and write again
     // change_image.SetBuffer(buffer);
     // gdcm::DataElement pixeldata = change_image.GetDataElement();
     gdcm::DataElement pixeldata(gdcm::Tag(0x7fe0, 0x0010));
     pixeldata.SetByteValue(buffer, len);
 
-    // delete[] buffer;
+    delete[] buffer;
     gdcm::SmartPointer<gdcm::Image> im = new gdcm::Image;
     im->SetNumberOfDimensions(2);
     im->SetDimension(0, xmax);
     im->SetDimension(1, ymax);
     im->SetPhotometricInterpretation(change_image.GetPhotometricInterpretation());
+    im->GetPixelFormat().SetSamplesPerPixel(1);
 
     // gdcm::Image im = change_image;
     im->SetDataElement(pixeldata);
