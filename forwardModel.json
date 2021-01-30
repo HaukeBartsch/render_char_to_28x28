@@ -4,8 +4,29 @@
     "logic": {
         "font": [
             {
-                "name": "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
-            }
+                "name": "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+                "sizes": [
+                    8,
+                    11,
+                    12,
+                    15
+                ],
+                "face_indexes": [
+                    0
+                ]
+            },
+	    {
+                "name": "/root/render_char_to_28x28/data/Menlo.ttc",
+                "sizes": [
+                    8,
+                    11,
+                    12,
+                    15
+                ],
+                "face_indexes": [
+                    0
+                ]
+	    }
         ],
         "color": [
             {

@@ -158,18 +158,27 @@ std::vector<std::string> listFilesSTD(const std::string &path) {
 // a corpus of Norwegian text. Preferably we would use text that
 // actively is added to images - so some technical text including
 // medical and anatomical words.
-std::string generateRandomText(int len) {
-  std::string tmp_s;
-  static const char alphanum[] = "0123456789"
-                                 "      /_-."
-                                 "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                 "abcdefghijklmnopqrstuvwxyz";
+std::vector<std::u32string> generateRandomText(int len) {
+  std::vector<std::u32string> tmp_s;
+  static const unsigned char alphanum[] =
+      "0123456789      /_-.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-  tmp_s.reserve(len);
+  std::string unicodeChars = std::string(
+      u8"0123456789      /_-.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzøæåöüä");
 
+  std::vector<std::u32string> bla = {U"w", U"x", U"y", U"z", U"ø", U"æ", U"å", U"ö", U"ü", U"ä"};
+
+  // tmp_s.reserve(len);
+
+  // for (int i = 0; i < len; ++i)
+  //  tmp_s += alphanum[std::rand() % (sizeof(alphanum) - 1)];
+  // for (int i = 0; i < len; ++i)
+  //  tmp_s += unicodeChars[std::rand() % (unicodeChars.size() - 1)];
   for (int i = 0; i < len; ++i)
-    tmp_s += alphanum[std::rand() % (sizeof(alphanum) - 1)];
+    tmp_s.push_back(bla[std::rand() % (bla.size() - 1)]);
 
+  // std::cout << tmp_s << std::endl;
+  // std::cout << unicodeChars << std::endl;
   return tmp_s;
 }
 
@@ -196,8 +205,8 @@ int main(int argc, char **argv) {
 
   std::string dicom_path = "";
   std::string configfile_path = "";
-  std::string output = ""; // directory path
-  std::string font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
+  std::string output = "";    // directory path
+  std::string font_path = ""; // "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
   int target = 1;
 
   for (option::Option *opt = options[UNKNOWN]; opt; opt = opt->next())
@@ -260,23 +269,19 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  std::string dn = font_path;
-  struct stat buf;
-  if (!(stat(dn.c_str(), &buf) == 0)) {
-    fprintf(stderr,
-            "Error: no font provided. Use the -f option and provide the name of a ttf file.\n");
-    exit(-1);
-  }
+  int font_size = 12;
+  int face_index;
 
   // we should parse the config file
   pt::ptree root;
   bool configFileExists = false;
-  dn = configfile_path;
+  std::string dn = configfile_path;
   struct stat stat_buffer;
   if (!(stat(dn.c_str(), &stat_buffer) == 0)) {
     configFileExists = false;
   } else {
     configFileExists = true;
+    fprintf(stdout, "  Found config file in: %s\n", configfile_path.c_str());
   }
   if (configFileExists) {
     pt::read_json(configfile_path.c_str(), root);
@@ -287,17 +292,41 @@ int main(int argc, char **argv) {
     // Check for a random font
     //
     std::vector<std::string> font_paths;
+    std::vector<std::vector<int>> font_sizes;   // pick a random size from these
+    std::vector<std::vector<int>> face_indexes; // if the font has more than one face index
     if (font_path == "") {
-      auto bounds = root.get_child("logic.font").equal_range("");
+      auto bounds = root.get_child("logic").get_child("font").equal_range("");
       for (auto iter = bounds.first; iter != bounds.second; ++iter) {
         std::string fname = iter->second.get_child("name").get_value<std::string>();
         font_paths.push_back(fname);
+        // now read the sizes for this font
+        auto bounds2 = iter->second.get_child("sizes").equal_range("");
+        std::vector<int> this_font_sizes;
+        for (auto iter2 = bounds2.first; iter2 != bounds2.second; ++iter2) {
+          int val = iter2->second.get_value<int>();
+          this_font_sizes.push_back(val);
+        }
+        font_sizes.push_back(this_font_sizes);
+        //
+        auto bounds3 = iter->second.get_child("face_indexes").equal_range("");
+        std::vector<int> this_face_indexes;
+        for (auto iter3 = bounds3.first; iter3 != bounds3.second; ++iter3) {
+          int val = iter3->second.get_value<int>();
+          this_face_indexes.push_back(val);
+        }
+        face_indexes.push_back(this_face_indexes);
       }
       if (font_paths.size() > 0) {
         int idx = std::rand() % font_paths.size();
         font_path = font_paths[idx]; // use a random font
-        fprintf(stdout, "Selected a font [%d] from the config file (%lu font%s found).\n", idx,
-                font_paths.size(), font_paths.size() > 1 ? "s" : "");
+        int idx2 = std::rand() % font_sizes[idx].size();
+        font_size = font_sizes[idx][idx2];
+        int idx3 = std::rand() % face_indexes[idx].size();
+        face_index = face_indexes[idx][idx3];
+        fprintf(stdout,
+                "Selected a font [%d] from the config file (%lu font%s found). Size is %d. Face "
+                "index is: %d.\n",
+                idx, font_paths.size(), font_paths.size() > 1 ? "s" : "", font_size, face_index);
       }
     }
     if (font_path == "") {
@@ -309,6 +338,14 @@ int main(int argc, char **argv) {
     // next we can look for a random color
     //
   }
+  dn = font_path;
+  struct stat buf;
+  if (!(stat(dn.c_str(), &buf) == 0)) {
+    fprintf(stderr,
+            "Error: no font provided. Use the -f option and provide the name of a ttf file.\n");
+    exit(-1);
+  }
+
   // we should find all DICOM files
   fprintf(stdout, "\n");
   std::vector<std::string> files = listFilesSTD(dicom_path);
@@ -340,7 +377,8 @@ int main(int argc, char **argv) {
     FT_Vector pen;    /* untransformed origin  */
     FT_Error error;
 
-    // the data is written into image so we need to clear it first before writing again in this loop
+    // the data is written into image so we need to clear it first before writing again in this
+    // loop
     memset(image, 0, HEIGHT * WIDTH);
 
     //
@@ -398,14 +436,16 @@ int main(int argc, char **argv) {
 
     change_image.GetBuffer(buffer);
 
-    char *text = strdup(generateRandomText(font_length).c_str()); /* second argument    */
-    json = (char *)"text";
-    fprintf(stdout, "  text is now: \"%s\" %s\n", text, pf.GetScalarTypeAsString());
+    std::vector<std::u32string> text2print = generateRandomText(font_length);
+    // char *text = strdup(text2print.c_str()); // print the text (no utf-8 here)
+    // json = (char *)"text";
+    // fprintf(stdout, "  text is now: \"%s\" ScalarType in DICOM: %s\n", text,
+    //        pf.GetScalarTypeAsString());
     // if (argc == 4) {
     //  json = argv[3];
     //}
-    num_chars = strlen(text);
-    angle = 0; // ( 25.0 / 360 ) * 3.14159 * 2;      /* use 25 degrees     */
+    num_chars = text2print.size(); // strlen(text);
+    angle = 0;                     // ( 25.0 / 360 ) * 3.14159 * 2;      /* use 25 degrees     */
     target_height = HEIGHT;
 
     error = FT_Init_FreeType(&library); /* initialize library */
@@ -415,20 +455,22 @@ int main(int argc, char **argv) {
       exit(-1);
     }
 
-    error = FT_New_Face(library, filename, 0, &face); /* create face object */
+    error = FT_New_Face(library, filename, face_index, &face); /* create face object */
     /* error handling omitted */
     if (face == NULL) {
       fprintf(stderr, "Error: no face found, provide the filename of a ttf file...\n");
       exit(-1);
     }
+    fprintf(stdout, "  number of face_index: %ld\n", face->num_faces);
 
     /* use 50pt at 100dpi
-    FT_F26Dot6  char_width,
-                FT_F26Dot6  char_height,
-                FT_UInt     horz_resolution,
-                FT_UInt     vert_resolution
+    FT_F26Dot6  char_width, in 1/64thh of points
+                FT_F26Dot6  char_height, in 1/64th of points
+                FT_UInt     horz_resolution, device resolution
+                FT_UInt     vert_resolution, device resolution
     */
-    error = FT_Set_Char_Size(face, 20 * 64, 0, 90, 0); /* set character size */
+    float font_size_in_pixel = font_size;
+    error = FT_Set_Char_Size(face, font_size_in_pixel * 64, 0, 96, 0); /* set character size */
     /* error handling omitted */
     if (error != 0) {
       fprintf(stdout, "we have an error here!\n");
@@ -452,7 +494,10 @@ int main(int argc, char **argv) {
       FT_Set_Transform(face, &matrix, &pen);
 
       /* load glyph image into the slot (erase previous one) */
-      error = FT_Load_Char(face, text[n], FT_LOAD_RENDER);
+      // unsigned long c = FT_Get_Char_Index(face, text2print[n]);
+      // error = FT_Load_Glyph(face, c, FT_LOAD_RENDER);
+
+      error = FT_Load_Char(face, text2print[n][0], FT_LOAD_RENDER);
       if (error)
         continue; /* ignore errors */
 
@@ -466,9 +511,9 @@ int main(int argc, char **argv) {
 
     if (strcmp(json, "text") == 0) {
       show_image();
-    } else {
-      show_json(text);
-    }
+    } // else {
+    //  show_json(text);
+    //}
     FT_Done_Face(face);
 
     //
@@ -510,26 +555,41 @@ int main(int argc, char **argv) {
 
     // now copy the string in
     signed short *bvals = (signed short *)buffer;
+    std::vector<int> boundingBox = {INT_MAX, INT_MAX, 0, 0}; // xmin, ymin, xmax, ymax
     for (int yi = 0; yi < HEIGHT; yi++) {
       for (int xi = 0; xi < WIDTH; xi++) {
         if (image[yi][xi] == 0)
           continue;
         // I would like to copy the value from image over to
         // the buffer. At some good location...
-        int px = 100;
-        int py = 100;
+        int px = 20;
+        int py = 20;
         int newx = px + xi;
         int newy = py + yi;
-        int idx = newx * ymax + newy;
+        int idx = newy * xmax + newx;
         if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
           continue;
         float f = 0.5;
+        if (image[yi][xi] == 0)
+          continue;
+        if (newx < boundingBox[0])
+          boundingBox[0] = newx;
+        if (newy < boundingBox[1])
+          boundingBox[1] = newy;
+        if (newy >= boundingBox[3])
+          boundingBox[3] = newy;
+        if (newx >= boundingBox[2])
+          boundingBox[2] = newx;
+
         float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image[yi][xi]) / 255.0 * 4095.0));
         // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
         bvals[idx] = (signed short)std::max(0.0f, std::min(4095.0f, v));
         // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
       }
     }
+    // we have a bounding box now for the text on this picture
+    fprintf(stdout, "bounding box: %d %d %d %d\n", boundingBox[0], boundingBox[1], boundingBox[2],
+            boundingBox[3]);
 
     // now we can add the bitmap to the original data and write again
     // change_image.SetBuffer(buffer);
