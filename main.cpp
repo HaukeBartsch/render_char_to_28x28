@@ -544,6 +544,11 @@ int main(int argc, char **argv) {
     im->SetDimension(1, ymax);
     im->SetPhotometricInterpretation(change_image.GetPhotometricInterpretation());
     im->GetPixelFormat().SetSamplesPerPixel(1);
+    im->GetPixelFormat().SetBitsAllocated(change_image.GetPixelFormat().GetBitsAllocated());
+    im->GetPixelFormat().SetBitsStored(change_image.GetPixelFormat().GetBitsStored());
+    im->GetPixelFormat().SetHighBit(change_image.GetPixelFormat().GetHighBit());
+    im->GetPixelFormat().SetPixelRepresentation(
+        change_image.GetPixelFormat().GetPixelRepresentation());
 
     // gdcm::Image im = change_image;
     ds = reader.GetFile().GetDataSet();
