@@ -400,7 +400,7 @@ int main(int argc, char **argv) {
 
     char *text = strdup(generateRandomText(font_length).c_str()); /* second argument    */
     json = (char *)"text";
-    fprintf(stdout, "  text is now: \"%s\"\n", text);
+    fprintf(stdout, "  text is now: \"%s\" %s\n", text, pf.GetScalarTypeAsString());
     // if (argc == 4) {
     //  json = argv[3];
     //}
@@ -506,10 +506,10 @@ int main(int argc, char **argv) {
 
     unsigned short xmax = (unsigned short)extent[0];
     unsigned short ymax = (unsigned short)extent[1];
-    fprintf(stdout, "dimensions: %d %d\n", xmax, ymax);
+    fprintf(stdout, "dimensions: %d %d, len: %lu\n", xmax, ymax, len);
 
     // now copy the string in
-    unsigned short *bvals = (unsigned short *)buffer;
+    signed short *bvals = (signed short *)buffer;
     for (int yi = 0; yi < HEIGHT; yi++) {
       for (int xi = 0; xi < WIDTH; xi++) {
         if (image[yi][xi] == 0)
@@ -524,7 +524,10 @@ int main(int argc, char **argv) {
         if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
           continue;
         float f = 0.5;
-        bvals[idx] = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image[yi][xi]) / 255.0 * 4096.0));
+        float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image[yi][xi]) / 255.0 * 4095.0));
+        // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+        bvals[idx] = (signed short)std::max(0.0f, std::min(4095.0f, v));
+        // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
       }
     }
 
@@ -543,7 +546,16 @@ int main(int argc, char **argv) {
     im->GetPixelFormat().SetSamplesPerPixel(1);
 
     // gdcm::Image im = change_image;
+    ds = reader.GetFile().GetDataSet();
     im->SetDataElement(pixeldata);
+    gdcm::UIDGenerator uid;
+    gdcm::Attribute<0x0008, 0x18> ss;
+    ss.SetValue(uid.Generate());
+    ds.Replace(ss.GetAsDataElement());
+
+    gdcm::Attribute<0x0020, 0x000e> ss2;
+    ss2.SetValue(uid.Generate());
+    ds.Replace(ss2.GetAsDataElement());
 
     gdcm::ImageWriter writer;
     writer.SetImage(*im);
