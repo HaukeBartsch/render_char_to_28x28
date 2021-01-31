@@ -488,86 +488,6 @@ int main(int argc, char **argv) {
 
     change_image.GetBuffer(buffer);
 
-    std::vector<std::u32string> text2print = generateRandomText(font_length);
-    // char *text = strdup(text2print.c_str()); // print the text (no utf-8 here)
-    // json = (char *)"text";
-    // fprintf(stdout, "  text is now: \"%s\" ScalarType in DICOM: %s\n", text,
-    //        pf.GetScalarTypeAsString());
-    // if (argc == 4) {
-    //  json = argv[3];
-    //}
-    num_chars = text2print.size(); // strlen(text);
-    angle = 0;                     // ( 25.0 / 360 ) * 3.14159 * 2;      /* use 25 degrees     */
-    target_height = HEIGHT;
-
-    error = FT_Init_FreeType(&library); /* initialize library */
-    /* error handling omitted */
-    if (error != 0) {
-      fprintf(stderr, "Error: The freetype libbrary could not be initialized with this font.\n");
-      exit(-1);
-    }
-
-    error = FT_New_Face(library, filename, face_index, &face); /* create face object */
-    /* error handling omitted */
-    if (face == NULL) {
-      fprintf(stderr, "Error: no face found, provide the filename of a ttf file...\n");
-      exit(-1);
-    }
-    fprintf(stdout, "  number of face_index: %ld\n", face->num_faces);
-
-    /* use 50pt at 100dpi
-    FT_F26Dot6  char_width, in 1/64thh of points
-                FT_F26Dot6  char_height, in 1/64th of points
-                FT_UInt     horz_resolution, device resolution
-                FT_UInt     vert_resolution, device resolution
-    */
-    float font_size_in_pixel = font_size;
-    error = FT_Set_Char_Size(face, font_size_in_pixel * 64, 0, 96, 0); /* set character size */
-    /* error handling omitted */
-    if (error != 0) {
-      fprintf(stdout, "we have an error here!\n");
-    }
-
-    slot = face->glyph;
-
-    /* set up matrix */
-    matrix.xx = (FT_Fixed)(cos(angle) * 0x10000L);
-    matrix.xy = (FT_Fixed)(-sin(angle) * 0x10000L);
-    matrix.yx = (FT_Fixed)(sin(angle) * 0x10000L);
-    matrix.yy = (FT_Fixed)(cos(angle) * 0x10000L);
-
-    /* the pen position in 26.6 cartesian space coordinates; */
-    /* start at (300,200) relative to the upper left corner  */
-    pen.x = 1 * 64;
-    pen.y = (target_height - 20) * 64;
-
-    for (n = 0; n < num_chars; n++) {
-      /* set transformation */
-      FT_Set_Transform(face, &matrix, &pen);
-
-      /* load glyph image into the slot (erase previous one) */
-      // unsigned long c = FT_Get_Char_Index(face, text2print[n]);
-      // error = FT_Load_Glyph(face, c, FT_LOAD_RENDER);
-
-      error = FT_Load_Char(face, text2print[n][0], FT_LOAD_RENDER);
-      if (error)
-        continue; /* ignore errors */
-
-      /* now, draw to our target surface (convert position) */
-      draw_bitmap(&slot->bitmap, slot->bitmap_left, target_height - slot->bitmap_top);
-
-      /* increment pen position */
-      pen.x += slot->advance.x;
-      pen.y += slot->advance.y;
-    }
-
-    // if (strcmp(json, "text") == 0) {
-    //  show_image();
-    //} // else {
-    //  show_json(text);
-    //}
-    FT_Done_Face(face);
-
     //
     // write the image pair
     //
@@ -597,51 +517,136 @@ int main(int argc, char **argv) {
     if (!writer2.Write()) {
       return 1;
     }
+    unsigned short xmax;
+    unsigned short ymax;
 
-    // image dimensions
-    std::vector<unsigned int> extent = gdcm::ImageHelper::GetDimensionsValue(reader.GetFile());
+    // generate text more than once here
+    for (int text_lines = 0; text_lines < 1; text_lines++) {
+      int px = 20;
+      int py = 20 + text_lines * HEIGHT;
+      std::vector<std::u32string> text2print = generateRandomText(font_length);
+      // char *text = strdup(text2print.c_str()); // print the text (no utf-8 here)
+      // json = (char *)"text";
+      // fprintf(stdout, "  text is now: \"%s\" ScalarType in DICOM: %s\n", text,
+      //        pf.GetScalarTypeAsString());
+      // if (argc == 4) {
+      //  json = argv[3];
+      //}
+      num_chars = text2print.size(); // strlen(text);
+      angle = 0;                     // ( 25.0 / 360 ) * 3.14159 * 2;      /* use 25 degrees     */
+      target_height = HEIGHT;
 
-    unsigned short xmax = (unsigned short)extent[0];
-    unsigned short ymax = (unsigned short)extent[1];
-    fprintf(stdout, "dimensions: %d %d, len: %lu\n", xmax, ymax, len);
-
-    // now copy the string in
-    signed short *bvals = (signed short *)buffer;
-    std::vector<int> boundingBox = {INT_MAX, INT_MAX, 0, 0}; // xmin, ymin, xmax, ymax
-    for (int yi = 0; yi < HEIGHT; yi++) {
-      for (int xi = 0; xi < WIDTH; xi++) {
-        if (image[yi][xi] == 0)
-          continue;
-        // I would like to copy the value from image over to
-        // the buffer. At some good location...
-        int px = 20;
-        int py = 20;
-        int newx = px + xi;
-        int newy = py + yi;
-        int idx = newy * xmax + newx;
-        if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
-          continue;
-        float f = 0.5;
-        if (image[yi][xi] == 0)
-          continue;
-        if (newx < boundingBox[0])
-          boundingBox[0] = newx;
-        if (newy < boundingBox[1])
-          boundingBox[1] = newy;
-        if (newy >= boundingBox[3])
-          boundingBox[3] = newy;
-        if (newx >= boundingBox[2])
-          boundingBox[2] = newx;
-
-        float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image[yi][xi]) / 255.0 * 4095.0));
-        // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
-        bvals[idx] = (signed short)std::max(0.0f, std::min(4095.0f, v));
-        // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+      error = FT_Init_FreeType(&library); /* initialize library */
+      /* error handling omitted */
+      if (error != 0) {
+        fprintf(stderr, "Error: The freetype libbrary could not be initialized with this font.\n");
+        exit(-1);
       }
+
+      error = FT_New_Face(library, filename, face_index, &face); /* create face object */
+      /* error handling omitted */
+      if (face == NULL) {
+        fprintf(stderr, "Error: no face found, provide the filename of a ttf file...\n");
+        exit(-1);
+      }
+      fprintf(stdout, "  number of face_index: %ld\n", face->num_faces);
+
+      /* use 50pt at 100dpi
+      FT_F26Dot6  char_width, in 1/64thh of points
+                  FT_F26Dot6  char_height, in 1/64th of points
+                  FT_UInt     horz_resolution, device resolution
+                  FT_UInt     vert_resolution, device resolution
+      */
+      float font_size_in_pixel = font_size;
+      error = FT_Set_Char_Size(face, font_size_in_pixel * 64, 0, 96, 0); /* set character size */
+      /* error handling omitted */
+      if (error != 0) {
+        fprintf(stdout, "we have an error here!\n");
+      }
+
+      slot = face->glyph;
+
+      /* set up matrix */
+      matrix.xx = (FT_Fixed)(cos(angle) * 0x10000L);
+      matrix.xy = (FT_Fixed)(-sin(angle) * 0x10000L);
+      matrix.yx = (FT_Fixed)(sin(angle) * 0x10000L);
+      matrix.yy = (FT_Fixed)(cos(angle) * 0x10000L);
+
+      /* the pen position in 26.6 cartesian space coordinates; */
+      /* start at (300,200) relative to the upper left corner  */
+      pen.x = 1 * 64;
+      pen.y = (target_height - 20) * 64;
+
+      for (n = 0; n < num_chars; n++) {
+        /* set transformation */
+        FT_Set_Transform(face, &matrix, &pen);
+
+        /* load glyph image into the slot (erase previous one) */
+        // unsigned long c = FT_Get_Char_Index(face, text2print[n]);
+        // error = FT_Load_Glyph(face, c, FT_LOAD_RENDER);
+
+        error = FT_Load_Char(face, text2print[n][0], FT_LOAD_RENDER);
+        if (error)
+          continue; /* ignore errors */
+
+        /* now, draw to our target surface (convert position) */
+        draw_bitmap(&slot->bitmap, slot->bitmap_left, target_height - slot->bitmap_top);
+
+        /* increment pen position */
+        pen.x += slot->advance.x;
+        pen.y += slot->advance.y;
+      }
+
+      // if (strcmp(json, "text") == 0) {
+      //  show_image();
+      //} // else {
+      //  show_json(text);
+      //}
+      FT_Done_Face(face);
+
+      // image dimensions
+      std::vector<unsigned int> extent = gdcm::ImageHelper::GetDimensionsValue(reader.GetFile());
+
+      xmax = (unsigned short)extent[0];
+      ymax = (unsigned short)extent[1];
+      fprintf(stdout, "dimensions: %d %d, len: %lu\n", xmax, ymax, len);
+
+      // now copy the string in
+      signed short *bvals = (signed short *)buffer;
+      std::vector<int> boundingBox = {INT_MAX, INT_MAX, 0, 0}; // xmin, ymin, xmax, ymax
+      for (int yi = 0; yi < HEIGHT; yi++) {
+        for (int xi = 0; xi < WIDTH; xi++) {
+          if (image[yi][xi] == 0)
+            continue;
+          // I would like to copy the value from image over to
+          // the buffer. At some good location...
+          int newx = px + xi;
+          int newy = py + yi;
+          int idx = newy * xmax + newx;
+          if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+            continue;
+          float f = 0.5;
+          if (image[yi][xi] == 0)
+            continue;
+          if (newx < boundingBox[0])
+            boundingBox[0] = newx;
+          if (newy < boundingBox[1])
+            boundingBox[1] = newy;
+          if (newy >= boundingBox[3])
+            boundingBox[3] = newy;
+          if (newx >= boundingBox[2])
+            boundingBox[2] = newx;
+
+          float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image[yi][xi]) / 255.0 * 4095.0));
+          // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+          bvals[idx] = (signed short)std::max(0.0f, std::min(4095.0f, v));
+          // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+        }
+      }
+      // we have a bounding box now for the text on this picture
+      fprintf(stdout, "bounding box: %d %d %d %d\n", boundingBox[0], boundingBox[1], boundingBox[2],
+              boundingBox[3]);
     }
-    // we have a bounding box now for the text on this picture
-    fprintf(stdout, "bounding box: %d %d %d %d\n", boundingBox[0], boundingBox[1], boundingBox[2],
-            boundingBox[3]);
 
     // now we can add the bitmap to the original data and write again
     // change_image.SetBuffer(buffer);
