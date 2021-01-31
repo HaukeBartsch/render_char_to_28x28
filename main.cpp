@@ -125,8 +125,9 @@ const option::Descriptor usage[] = {
      "  --config, -c \tConfig file to program text generation."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
-     "  anonymize --input directory --output directory --infofile /data/bla/info.json -b\n"
-     "  anonymize --help\n"},
+     "  ./renderText -d data/LIDC-IDRI-0006/01-01-2000-92500/3000556-20957/ -o /tmp/bla -c "
+     "forwardModel.json\n"
+     "  ./renderText --help\n"},
     {0, 0, 0, 0, 0, 0}};
 
 // get a list of all the DICOM files we should use
@@ -289,6 +290,9 @@ int main(int argc, char **argv) {
     configFileExists = true;
     fprintf(stdout, "  Found config file in: %s\n", configfile_path.c_str());
   }
+  std::vector<std::string> font_paths;
+  std::vector<std::vector<int>> font_sizes;   // pick a random size from these
+  std::vector<std::vector<int>> face_indexes; // if the font has more than one face index
   if (configFileExists) {
     pt::read_json(configfile_path.c_str(), root);
     fprintf(stdout, "Found model in config file \"%s\"\n\n",
@@ -297,9 +301,6 @@ int main(int argc, char **argv) {
     //
     // Check for a random font
     //
-    std::vector<std::string> font_paths;
-    std::vector<std::vector<int>> font_sizes;   // pick a random size from these
-    std::vector<std::vector<int>> face_indexes; // if the font has more than one face index
     if (font_path == "") {
       auto bounds = root.get_child("logic").get_child("font").equal_range("");
       for (auto iter = bounds.first; iter != bounds.second; ++iter) {
@@ -373,15 +374,30 @@ int main(int argc, char **argv) {
   //  }
 
   int font_length = 20;
-  const char *filename = font_path.c_str(); /* first argument     */
-  gdcm::ImageReader reader;
+  // const char *filename = font_path.c_str(); /* first argument     */
 
   for (int i = 0; i < target; i++) {
+    //
+    // for every new DICOM image we randomize some things
+    //
+    int idx = std::rand() % font_paths.size();
+    font_path = font_paths[idx]; // use a random font
+    int idx2 = std::rand() % font_sizes[idx].size();
+    font_size = font_sizes[idx][idx2];
+    int idx3 = std::rand() % face_indexes[idx].size();
+    face_index = face_indexes[idx][idx3];
+    fprintf(stdout,
+            "Selected a font [%d] from the config file (%lu font%s found). Size is %d. Face "
+            "index is: %d.\n",
+            idx, font_paths.size(), font_paths.size() > 1 ? "s" : "", font_size, face_index);
+    const char *filename = font_path.c_str(); /* first argument     */
+
     FT_Face face;
     FT_GlyphSlot slot;
     FT_Matrix matrix; /* transformation matrix */
     FT_Vector pen;    /* untransformed origin  */
     FT_Error error;
+    gdcm::ImageReader reader;
 
     // the data is written into image so we need to clear it first before writing again in this
     // loop
@@ -400,7 +416,8 @@ int main(int argc, char **argv) {
       r.SetFileName(files[pickImageIdx].c_str());
       if (r.CanRead() != true) {
         maxIter--;
-        fprintf(stdout, "read failed... try next\n");
+        fprintf(stdout, "read failed [%d] for \"%s\"... try next\n", maxIter,
+                files[pickImageIdx].c_str());
         continue; // try again
       }
 
@@ -437,12 +454,32 @@ int main(int argc, char **argv) {
     // const unsigned int *dims = image.GetDimensions();
     // Origin
     // const double *origin = image.GetOrigin();
-    // const gdcm::PhotometricInterpretation &pl = image.GetPhotometricInterpretation();
 
     gdcm::File &file = reader.GetFile();
     gdcm::DataSet &ds = file.GetDataSet();
     const gdcm::Image &change_image = change.GetOutput();
+    const gdcm::PhotometricInterpretation &pi = change_image.GetPhotometricInterpretation();
+    // We need to check what the phometric interpretation is. We cannot handle all of them.
+    if (pi != gdcm::PhotometricInterpretation::MONOCHROME2) {
+      fprintf(stderr, "Warning: We only understand MONOCHROME2, skip this image.\n");
+      // we could change the interpreation as well
+      /*        gdcm::ImageChangePhotometricInterpretation icpi;
+         icpi.SetInput(image);
+         icpi.SetPhotometricInterpretation(gdcm::PhotometricInterpretation::MONOCHROME2);
+         if (!icpi.Change())
+         {
+           itkExceptionMacro(<< "Failed to change to Photometric Interpretation");
+         }
+         itkWarningMacro(<< "Converting from MONOCHROME1 to MONOCHROME2 may impact the meaning of
+         DICOM attributes related " "to pixel values."); image = icpi.GetOutput(); */
+
+      continue;
+    }
+
     gdcm::PixelFormat pf = change_image.GetPixelFormat();
+    // pf could be gdcm::PixelFormat::INT8, or INT16, etc...
+    // We need to change our cast further down on the pixel data.
+
     unsigned short pixelsize = pf.GetPixelSize();
     fprintf(stdout, "  pixelsize of input is: %d\n", pixelsize);
     unsigned long len = change_image.GetBufferLength();
@@ -624,6 +661,8 @@ int main(int argc, char **argv) {
     im->GetPixelFormat().SetHighBit(change_image.GetPixelFormat().GetHighBit());
     im->GetPixelFormat().SetPixelRepresentation(
         change_image.GetPixelFormat().GetPixelRepresentation());
+    im->SetSlope(change_image.GetSlope());
+    im->SetIntercept(change_image.GetIntercept());
 
     // gdcm::Image im = change_image;
     ds = reader.GetFile().GetDataSet();
