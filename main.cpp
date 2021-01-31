@@ -160,13 +160,19 @@ std::vector<std::string> listFilesSTD(const std::string &path) {
 // medical and anatomical words.
 std::vector<std::u32string> generateRandomText(int len) {
   std::vector<std::u32string> tmp_s;
-  static const unsigned char alphanum[] =
-      "0123456789      /_-.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  // static const unsigned char alphanum[] =
+  //    "0123456789      /_-.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-  std::string unicodeChars = std::string(
-      u8"0123456789      /_-.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzøæåöüä");
+  // std::string unicodeChars = std::string(
+  //    u8"0123456789      /_-.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzøæåöüä");
 
-  std::vector<std::u32string> bla = {U"w", U"x", U"y", U"z", U"ø", U"æ", U"å", U"ö", U"ü", U"ä"};
+  std::vector<std::u32string> unicodeChars = {
+      U"0", U"1", U"2", U"3", U"4", U"5", U"6", U"7", U"8", U"9", U" ", U" ", U" ",
+      U" ", U" ", U" ", U"/", U"_", U"-", U".", U"A", U"B", U"C", U"D", U"E", U"F",
+      U"G", U"H", U"I", U"J", U"K", U"L", U"M", U"N", U"O", U"P", U"Q", U"R", U"S",
+      U"T", U"U", U"V", U"W", U"X", U"Y", U"Z", U"a", U"b", U"c", U"d", U"e", U"f",
+      U"g", U"h", U"i", U"j", U"k", U"l", U"m", U"n", U"o", U"p", U"q", U"r", U"s",
+      U"t", U"u", U"v", U"w", U"x", U"y", U"z", U"ø", U"æ", U"å", U"ö", U"ü", U"ä"};
 
   // tmp_s.reserve(len);
 
@@ -175,7 +181,7 @@ std::vector<std::u32string> generateRandomText(int len) {
   // for (int i = 0; i < len; ++i)
   //  tmp_s += unicodeChars[std::rand() % (unicodeChars.size() - 1)];
   for (int i = 0; i < len; ++i)
-    tmp_s.push_back(bla[std::rand() % (bla.size() - 1)]);
+    tmp_s.push_back(unicodeChars[std::rand() % (unicodeChars.size() - 1)]);
 
   // std::cout << tmp_s << std::endl;
   // std::cout << unicodeChars << std::endl;
@@ -389,6 +395,15 @@ int main(int argc, char **argv) {
     int maxIter = 10;
     while (maxIter > 0) {
       pickImageIdx = std::rand() % files.size();
+      // to check for DICOM lets use the normal gdcm::Read and CanRead
+      gdcm::Reader r;
+      r.SetFileName(files[pickImageIdx].c_str());
+      if (r.CanRead() != true) {
+        maxIter--;
+        fprintf(stdout, "read failed... try next\n");
+        continue; // try again
+      }
+
       reader.SetFileName(files[pickImageIdx].c_str());
       fprintf(stdout, "Try to read \"%s\"\n", files[pickImageIdx].c_str());
       if (!reader.Read()) {
@@ -509,9 +524,9 @@ int main(int argc, char **argv) {
       pen.y += slot->advance.y;
     }
 
-    if (strcmp(json, "text") == 0) {
-      show_image();
-    } // else {
+    // if (strcmp(json, "text") == 0) {
+    //  show_image();
+    //} // else {
     //  show_json(text);
     //}
     FT_Done_Face(face);
