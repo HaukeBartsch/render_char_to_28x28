@@ -820,6 +820,10 @@ int main(int argc, char **argv) {
         // we have a bounding box now for the text on this picture
         fprintf(stdout, "  bounding box: %d %d %d %d\n", boundingBox[0], boundingBox[1],
                 boundingBox[2], boundingBox[3]);
+        if (boundingBox[0] == INT_MAX) {
+          // nothing got written, empty bounding box, don't safe
+          continue;
+        }
         // bbox.insert(files[pickImageIdx].c_str()
         json bbox = json::object();
         std::ostringstream o;
