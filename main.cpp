@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <codecvt>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -32,10 +33,12 @@
 #include <boost/property_tree/ptree.hpp>
 
 // argument parsing
+#include "json.hpp"
 #include "optionparser.h"
 
 // Short alias for this namespace
 namespace pt = boost::property_tree;
+using json = nlohmann::json;
 
 #define WIDTH 280
 #define HEIGHT 28
@@ -168,12 +171,12 @@ std::vector<std::u32string> generateRandomText(int len) {
   //    u8"0123456789      /_-.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzøæåöüä");
 
   std::vector<std::u32string> unicodeChars = {
-      U"0", U"1", U"2", U"3", U"4", U"5", U"6", U"7", U"8", U"9", U" ", U" ", U" ",
-      U" ", U" ", U" ", U"/", U"_", U"-", U".", U"A", U"B", U"C", U"D", U"E", U"F",
-      U"G", U"H", U"I", U"J", U"K", U"L", U"M", U"N", U"O", U"P", U"Q", U"R", U"S",
-      U"T", U"U", U"V", U"W", U"X", U"Y", U"Z", U"a", U"b", U"c", U"d", U"e", U"f",
-      U"g", U"h", U"i", U"j", U"k", U"l", U"m", U"n", U"o", U"p", U"q", U"r", U"s",
-      U"t", U"u", U"v", U"w", U"x", U"y", U"z", U"ø", U"æ", U"å", U"ö", U"ü", U"ä"};
+      U"0", U"1", U"2", U"3", U"4", U"5", U"6", U"7", U"8", U"9", U" ", U" ", U" ", U" ",
+      U" ", U" ", U"/", U"_", U"-", U".", U"A", U"B", U"C", U"D", U"E", U"F", U"G", U"H",
+      U"I", U"J", U"K", U"L", U"M", U"N", U"O", U"P", U"Q", U"R", U"S", U"T", U"U", U"V",
+      U"W", U"X", U"Y", U"Z", U"a", U"b", U"c", U"d", U"e", U"f", U"g", U"h", U"i", U"j",
+      U"k", U"l", U"m", U"n", U"o", U"p", U"q", U"r", U"s", U"t", U"u", U"v", U"w", U"x",
+      U"y", U"z", U"ø", U"æ", U"å", U"ö", U"ü", U"ä", U"(", U")", U"]", U"["};
 
   // tmp_s.reserve(len);
 
@@ -341,9 +344,6 @@ int main(int argc, char **argv) {
               "Error: no font path specified in either config file or on the command line.");
       exit(-1);
     }
-    //
-    // next we can look for a random color
-    //
   }
   dn = font_path;
   struct stat buf;
@@ -353,6 +353,66 @@ int main(int argc, char **argv) {
     exit(-1);
   }
 
+  //
+  // next we can look for a random placement
+  //
+  std::vector<std::map<std::string, std::vector<float>>>
+      placements; // if the font has more than one face index
+  if (configFileExists) {
+    pt::read_json(configfile_path.c_str(), root);
+    boost::property_tree::ptree d = root.get_child("logic").get_child("placement");
+    for (const std::pair<std::string, boost::property_tree::ptree> &p : d) {
+      std::map<std::string, std::vector<float>> entry;
+      fprintf(stdout, "  Placement: %s\n", p.first.c_str());
+      auto bounds = p.second.get_child("x").equal_range("");
+      std::vector<float> values;
+      for (auto iter = bounds.first; iter != bounds.second; ++iter) {
+        // fprintf(stdout, "found an x value of %s\n",
+        // iter->second.get_value<std::string>().c_str());
+        values.push_back(iter->second.get_value<float>());
+      }
+      entry.insert(std::pair<std::string, std::vector<float>>("x", values));
+
+      auto bounds2 = p.second.get_child("y").equal_range("");
+      std::vector<float> values2;
+      for (auto iter2 = bounds2.first; iter2 != bounds2.second; ++iter2) {
+        // fprintf(stdout, "found an x value of %s\n",
+        // iter2->second.get_value<std::string>().c_str());
+        values2.push_back(iter2->second.get_value<float>());
+      }
+      entry.insert(std::pair<std::string, std::vector<float>>("y", values2));
+
+      auto bounds3 = p.second.get_child("repeat-spacing").equal_range("");
+      std::vector<float> values3;
+      for (auto iter3 = bounds3.first; iter3 != bounds3.second; ++iter3) {
+        // fprintf(stdout, "found an x value of %s\n",
+        // iter2->second.get_value<std::string>().c_str());
+        values3.push_back(iter3->second.get_value<float>());
+      }
+      entry.insert(std::pair<std::string, std::vector<float>>("repeat-spacing", values3));
+
+      auto bounds4 = p.second.get_child("how-many").equal_range("");
+      std::vector<float> values4;
+      for (auto iter4 = bounds4.first; iter4 != bounds4.second; ++iter4) {
+        // fprintf(stdout, "found an x value of %s\n",
+        // iter2->second.get_value<std::string>().c_str());
+        values4.push_back(iter4->second.get_value<float>());
+      }
+      entry.insert(std::pair<std::string, std::vector<float>>("how-many", values4));
+
+      auto bounds5 = p.second.get_child("lengths").equal_range("");
+      std::vector<float> values5;
+      for (auto iter5 = bounds5.first; iter5 != bounds5.second; ++iter5) {
+        // fprintf(stdout, "found an x value of %s\n",
+        // iter2->second.get_value<std::string>().c_str());
+        values5.push_back(iter5->second.get_value<float>());
+      }
+      entry.insert(std::pair<std::string, std::vector<float>>("lengths", values5));
+
+      placements.push_back(entry);
+    }
+  }
+  fprintf(stdout, "  Found %ld placements\n", placements.size());
   // we should find all DICOM files
   fprintf(stdout, "\n");
   std::vector<std::string> files = listFilesSTD(dicom_path);
@@ -366,7 +426,7 @@ int main(int argc, char **argv) {
   double angle;
   int target_height;
   int n, num_chars;
-  char *json;
+  //char *json;
 
   //  if (argc < 3) {
   //    fprintf(stderr, "usage: %s font_file.ttf sample-text json|text\n", argv[0]);
@@ -374,9 +434,14 @@ int main(int argc, char **argv) {
   //  }
 
   int font_length = 20;
+ 
   // const char *filename = font_path.c_str(); /* first argument     */
+  // std::map<std::string, std::vector<bbox_t>> boundingBoxes;
+  json boundingBoxes = json::object();
 
-  for (int i = 0; i < target; i++) {
+  for (int i = 0; i < target; i++) { // how many images
+
+    json bboxes = json::array(); // all the bounding boxes for the current image
     //
     // for every new DICOM image we randomize some things
     //
@@ -436,6 +501,7 @@ int main(int argc, char **argv) {
       exit(-1);
     } else {
       fprintf(stdout, "  DICOM file: \"%s\"\n", files[pickImageIdx].c_str());
+      // bbox.insert(std::pair<std::string, std::string>("filename", files[pickImageIdx].c_str()));
     }
     const gdcm::Image &iimage = reader.GetImage();
     // we should probably change the transfer syntax here, uncompress JPEG2000 so that
@@ -520,133 +586,197 @@ int main(int argc, char **argv) {
     unsigned short xmax;
     unsigned short ymax;
 
-    // generate text more than once here
-    for (int text_lines = 0; text_lines < 1; text_lines++) {
-      int px = 20;
-      int py = 20 + text_lines * HEIGHT;
-      std::vector<std::u32string> text2print = generateRandomText(font_length);
-      // char *text = strdup(text2print.c_str()); // print the text (no utf-8 here)
-      // json = (char *)"text";
-      // fprintf(stdout, "  text is now: \"%s\" ScalarType in DICOM: %s\n", text,
-      //        pf.GetScalarTypeAsString());
-      // if (argc == 4) {
-      //  json = argv[3];
-      //}
-      num_chars = text2print.size(); // strlen(text);
-      angle = 0;                     // ( 25.0 / 360 ) * 3.14159 * 2;      /* use 25 degrees     */
-      target_height = HEIGHT;
+    // image dimensions
+    std::vector<unsigned int> extent = gdcm::ImageHelper::GetDimensionsValue(reader.GetFile());
 
-      error = FT_Init_FreeType(&library); /* initialize library */
-      /* error handling omitted */
-      if (error != 0) {
-        fprintf(stderr, "Error: The freetype libbrary could not be initialized with this font.\n");
-        exit(-1);
+    xmax = (unsigned short)extent[0];
+    ymax = (unsigned short)extent[1];
+    // fprintf(stdout, "  dimensions: %d %d, len: %lu\n", xmax, ymax, len);
+
+    // lets do all the text placements
+    for (int placement = 0; placement < placements.size(); placement++) {
+      fprintf(stdout, "Use placement: %d\n", placement);
+      float vx_min = placements[placement]["x"][0];
+      float vx_max = placements[placement]["x"][1];
+      float vx = vx_min + ((rand() * 1.0f) / (1.0f * RAND_MAX)) * (vx_max - vx_min);
+      float vy_min = placements[placement]["y"][0];
+      float vy_max = placements[placement]["y"][1];
+      float vy = vy_min + ((rand() * 1.0f) / (1.0f * RAND_MAX)) * (vy_max - vy_min);
+      int start_px, start_py;
+      bool neg_x = false;
+      bool neg_y = false;
+      if (vx >= 0) {
+        start_px = std::floor(xmax * vx);
+      } else {
+        start_px = xmax - std::floor(xmax * -vx);
+        neg_x = true;
       }
-
-      error = FT_New_Face(library, filename, face_index, &face); /* create face object */
-      /* error handling omitted */
-      if (face == NULL) {
-        fprintf(stderr, "Error: no face found, provide the filename of a ttf file...\n");
-        exit(-1);
+      if (vy >= 0) {
+        start_py = std::floor(ymax * vy);
+      } else {
+        start_py = ymax - std::floor(ymax * -vy);
+        neg_y = true;
       }
-      fprintf(stdout, "  number of face_index: %ld\n", face->num_faces);
+      // fprintf(stdout, "     %d %d\n", start_px, start_py);
+      int howmany_min = placements[placement]["how-many"][0];
+      int howmany_max = placements[placement]["how-many"][1];
+      int howmany = (rand() % (howmany_max - howmany_min)) + howmany_min;
 
-      /* use 50pt at 100dpi
-      FT_F26Dot6  char_width, in 1/64thh of points
-                  FT_F26Dot6  char_height, in 1/64th of points
-                  FT_UInt     horz_resolution, device resolution
-                  FT_UInt     vert_resolution, device resolution
-      */
-      float font_size_in_pixel = font_size;
-      error = FT_Set_Char_Size(face, font_size_in_pixel * 64, 0, 96, 0); /* set character size */
-      /* error handling omitted */
-      if (error != 0) {
-        fprintf(stdout, "we have an error here!\n");
-      }
+      float repeat_spacingx = placements[placement]["repeat-spacing"][0];
+      float repeat_spacingy = placements[placement]["repeat-spacing"][1];
+      float repeat_spacing = repeat_spacingx + (1.0 * rand() / (1.0f * RAND_MAX)) *
+                                                   (repeat_spacingy - repeat_spacingx);
+      // fprintf(stdout, "repeat_spacing here is: %f (%f .. %f), repeat is: %d\n", repeat_spacing,
+      //        repeat_spacingx, repeat_spacingy, howmany);
+      // generate text more than once here
+      for (int text_lines = 0; text_lines < howmany; text_lines++) {
+        memset(image, 0, HEIGHT * WIDTH);
 
-      slot = face->glyph;
+        int px = start_px;
+        int py = start_py + (neg_y ? -1 : 1) * (text_lines * font_size +
+                                                text_lines * (repeat_spacing * 0.5 * font_size));
 
-      /* set up matrix */
-      matrix.xx = (FT_Fixed)(cos(angle) * 0x10000L);
-      matrix.xy = (FT_Fixed)(-sin(angle) * 0x10000L);
-      matrix.yx = (FT_Fixed)(sin(angle) * 0x10000L);
-      matrix.yy = (FT_Fixed)(cos(angle) * 0x10000L);
+        int lengths_min = placements[placement]["lengths"][0];
+        int lengths_max = placements[placement]["lengths"][1];
+        font_length = (rand() % (lengths_max - lengths_min)) + lengths_min;
+        // fprintf(stdout, "FONTLENGTH IS: %d\n", font_length);
 
-      /* the pen position in 26.6 cartesian space coordinates; */
-      /* start at (300,200) relative to the upper left corner  */
-      pen.x = 1 * 64;
-      pen.y = (target_height - 20) * 64;
+        std::vector<std::u32string> text2print = generateRandomText(font_length);
+        // char *text = strdup(text2print.c_str()); // print the text (no utf-8 here)
+        // json = (char *)"text";
+        // fprintf(stdout, "  text is now: \"%s\" ScalarType in DICOM: %s\n", text,
+        //        pf.GetScalarTypeAsString());
+        // if (argc == 4) {
+        //  json = argv[3];
+        //}
+        num_chars = text2print.size(); // strlen(text);
+        angle = 0; // ( 25.0 / 360 ) * 3.14159 * 2;      /* use 25 degrees     */
+        target_height = HEIGHT;
 
-      for (n = 0; n < num_chars; n++) {
-        /* set transformation */
-        FT_Set_Transform(face, &matrix, &pen);
-
-        /* load glyph image into the slot (erase previous one) */
-        // unsigned long c = FT_Get_Char_Index(face, text2print[n]);
-        // error = FT_Load_Glyph(face, c, FT_LOAD_RENDER);
-
-        error = FT_Load_Char(face, text2print[n][0], FT_LOAD_RENDER);
-        if (error)
-          continue; /* ignore errors */
-
-        /* now, draw to our target surface (convert position) */
-        draw_bitmap(&slot->bitmap, slot->bitmap_left, target_height - slot->bitmap_top);
-
-        /* increment pen position */
-        pen.x += slot->advance.x;
-        pen.y += slot->advance.y;
-      }
-
-      // if (strcmp(json, "text") == 0) {
-      //  show_image();
-      //} // else {
-      //  show_json(text);
-      //}
-      FT_Done_Face(face);
-
-      // image dimensions
-      std::vector<unsigned int> extent = gdcm::ImageHelper::GetDimensionsValue(reader.GetFile());
-
-      xmax = (unsigned short)extent[0];
-      ymax = (unsigned short)extent[1];
-      fprintf(stdout, "dimensions: %d %d, len: %lu\n", xmax, ymax, len);
-
-      // now copy the string in
-      signed short *bvals = (signed short *)buffer;
-      std::vector<int> boundingBox = {INT_MAX, INT_MAX, 0, 0}; // xmin, ymin, xmax, ymax
-      for (int yi = 0; yi < HEIGHT; yi++) {
-        for (int xi = 0; xi < WIDTH; xi++) {
-          if (image[yi][xi] == 0)
-            continue;
-          // I would like to copy the value from image over to
-          // the buffer. At some good location...
-          int newx = px + xi;
-          int newy = py + yi;
-          int idx = newy * xmax + newx;
-          if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
-            continue;
-          float f = 0.5;
-          if (image[yi][xi] == 0)
-            continue;
-          if (newx < boundingBox[0])
-            boundingBox[0] = newx;
-          if (newy < boundingBox[1])
-            boundingBox[1] = newy;
-          if (newy >= boundingBox[3])
-            boundingBox[3] = newy;
-          if (newx >= boundingBox[2])
-            boundingBox[2] = newx;
-
-          float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image[yi][xi]) / 255.0 * 4095.0));
-          // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
-          bvals[idx] = (signed short)std::max(0.0f, std::min(4095.0f, v));
-          // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+        error = FT_Init_FreeType(&library); /* initialize library */
+        /* error handling omitted */
+        if (error != 0) {
+          fprintf(stderr,
+                  "Error: The freetype libbrary could not be initialized with this font.\n");
+          exit(-1);
         }
+
+        error = FT_New_Face(library, filename, face_index, &face); /* create face object */
+        /* error handling omitted */
+        if (face == NULL) {
+          fprintf(stderr, "Error: no face found, provide the filename of a ttf file...\n");
+          exit(-1);
+        }
+        // fprintf(stdout, "  number of face_index: %ld\n", face->num_faces);
+
+        /* use 50pt at 100dpi
+        FT_F26Dot6  char_width, in 1/64thh of points
+                    FT_F26Dot6  char_height, in 1/64th of points
+                    FT_UInt     horz_resolution, device resolution
+                    FT_UInt     vert_resolution, device resolution
+        */
+        float font_size_in_pixel = font_size;
+        error = FT_Set_Char_Size(face, font_size_in_pixel * 64, 0, 96, 0); /* set character size */
+        /* error handling omitted */
+        if (error != 0) {
+          fprintf(stdout, "Error: FT_Set_Char_Size returned error.\n");
+          exit(-1);
+        }
+
+        slot = face->glyph;
+
+        /* set up matrix */
+        matrix.xx = (FT_Fixed)(cos(angle) * 0x10000L);
+        matrix.xy = (FT_Fixed)(-sin(angle) * 0x10000L);
+        matrix.yx = (FT_Fixed)(sin(angle) * 0x10000L);
+        matrix.yy = (FT_Fixed)(cos(angle) * 0x10000L);
+
+        /* the pen position in 26.6 cartesian space coordinates; */
+        /* start at (300,200) relative to the upper left corner  */
+        pen.x = 1 * 64;
+        pen.y = (target_height - 20) * 64;
+
+        for (n = 0; n < num_chars; n++) {
+          /* set transformation */
+          FT_Set_Transform(face, &matrix, &pen);
+
+          /* load glyph image into the slot (erase previous one) */
+          // unsigned long c = FT_Get_Char_Index(face, text2print[n]);
+          // error = FT_Load_Glyph(face, c, FT_LOAD_RENDER);
+
+          error = FT_Load_Char(face, text2print[n][0], FT_LOAD_RENDER);
+          if (error)
+            continue; /* ignore errors */
+
+          /* now, draw to our target surface (convert position) */
+          draw_bitmap(&slot->bitmap, slot->bitmap_left, target_height - slot->bitmap_top);
+
+          /* increment pen position */
+          pen.x += slot->advance.x;
+          pen.y += slot->advance.y;
+        }
+
+        // if (strcmp(json, "text") == 0) {
+        //  show_image();
+        //} // else {
+        //  show_json(text);
+        //}
+        FT_Done_Face(face);
+
+        // now copy the string in
+        signed short *bvals = (signed short *)buffer;
+        std::vector<int> boundingBox = {INT_MAX, INT_MAX, 0, 0}; // xmin, ymin, xmax, ymax
+        for (int yi = 0; yi < HEIGHT; yi++) {
+          for (int xi = 0; xi < WIDTH; xi++) {
+            if (image[yi][xi] == 0)
+              continue;
+            // I would like to copy the value from image over to
+            // the buffer. At some good location...
+            int newx = px + xi;
+            int newy = py + yi;
+            int idx = newy * xmax + newx;
+            if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+              continue;
+            float f = 0.5;
+            if (image[yi][xi] == 0)
+              continue;
+            if (newx < boundingBox[0])
+              boundingBox[0] = newx;
+            if (newy < boundingBox[1])
+              boundingBox[1] = newy;
+            if (newy >= boundingBox[3])
+              boundingBox[3] = newy;
+            if (newx >= boundingBox[2])
+              boundingBox[2] = newx;
+
+            float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image[yi][xi]) / 255.0 * 4095.0));
+            // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+            bvals[idx] = (signed short)std::max(0.0f, std::min(4095.0f, v));
+            // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+          }
+        }
+        // we have a bounding box now for the text on this picture
+        fprintf(stdout, "  bounding box: %d %d %d %d\n", boundingBox[0], boundingBox[1],
+                boundingBox[2], boundingBox[3]);
+        // bbox.insert(files[pickImageIdx].c_str()
+        json bbox = json::object();
+        std::ostringstream o;
+        std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
+        for (int a = 0; a < text2print.size(); a++) {
+          o << conv.to_bytes(text2print[a]);
+          //sprintf(str_buf, "%s%n", str_buf, text2print[a].c_str());
+          // bbox.name += text2print[a].c_str();
+        }
+        bbox["name"] = std::string(o.str());
+        bbox["bbox"] = { boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3] };
+        bboxes[bboxes.size()] = bbox;
+
+        // boundingBoxes.insert(std::pair<std::string, std::map<std::string, std::string>>(
+        //    (files[pickImageIdx] + bb_count).c_str(), bbox));
       }
-      // we have a bounding box now for the text on this picture
-      fprintf(stdout, "bounding box: %d %d %d %d\n", boundingBox[0], boundingBox[1], boundingBox[2],
-              boundingBox[3]);
     }
+    // store all the bounding boxes of the current target image
+    boundingBoxes[files[pickImageIdx]] = bboxes;
 
     // now we can add the bitmap to the original data and write again
     // change_image.SetBuffer(buffer);
@@ -691,6 +821,12 @@ int main(int argc, char **argv) {
     }
   }
   FT_Done_FreeType(library);
+
+  // safe the boundingBoxes dataset now as well as a json
+  std::string res = boundingBoxes.dump(4) + "\n";
+  std::ofstream out(output+"/boundingBoxes.json");
+  out << res;
+  out.close();
 
   return 0;
 }
