@@ -8,7 +8,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <fstream>
 #include <codecvt>
+//#include <stxutif.h>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -767,6 +769,7 @@ int main(int argc, char **argv) {
           //sprintf(str_buf, "%s%n", str_buf, text2print[a].c_str());
           // bbox.name += text2print[a].c_str();
         }
+        //bbox["text"] = json::parse(text2print);
         bbox["name"] = std::string(o.str());
         bbox["bbox"] = { boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3] };
         bboxes[bboxes.size()] = bbox;
@@ -823,9 +826,12 @@ int main(int argc, char **argv) {
   FT_Done_FreeType(library);
 
   // safe the boundingBoxes dataset now as well as a json
-  std::string res = boundingBoxes.dump(4) + "\n";
+  //std::u32string res = boundingBoxes.dump(4);
+  std::locale::global(std::locale(""));
   std::ofstream out(output+"/boundingBoxes.json");
-  out << res;
+//  std::locale utf8_locale(std::locale(), new utf8cvt<false>);
+//  out.imbue(utf8_locale);
+  out << std::setw(4) << boundingBoxes << std::endl;
   out.close();
 
   return 0;
