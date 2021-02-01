@@ -4,12 +4,31 @@
                 -t 1
 */
 
+/*
+
+#define png_infopp_NULL (png_infopp)NULL
+#define int_p_NULL (int*)NULL
+#include <boost/gil/gil_all.hpp>
+#include <boost/gil/extension/io/png_dynamic_io.hpp>
+using namespace boost::gil;
+int main()
+{
+    rgb8_image_t img(512, 512);
+    rgb8_pixel_t red(255, 0, 0);
+    fill_pixels(view(img), red);
+    png_write_view("redsquare.png", const_view(img));
+}
+
+*/
+
+
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <fstream>
 #include <codecvt>
+#include <filesystem>
 //#include <stxutif.h>
 
 #include <ft2build.h>
@@ -38,6 +57,28 @@
 #include "json.hpp"
 #include "optionparser.h"
 
+// export as an image
+#include <boost/gil.hpp>
+#include <boost/gil/extension/io/png.hpp>
+#include <boost/gil/extension/dynamic_image/any_image.hpp>
+#include <boost/gil/image_view.hpp>
+
+
+#include <boost/mpl/vector.hpp>
+#include <boost/gil/typedefs.hpp>
+#include <boost/gil/extension/dynamic_image/any_image.hpp>
+#include <boost/gil/image_view.hpp>
+#include <boost/gil/planar_pixel_reference.hpp>
+#include <boost/gil/color_convert.hpp>
+#include <boost/gil/typedefs.hpp>
+#include <boost/gil/image_view_factory.hpp>
+
+
+//#include <boost/gil/extension/io/png_io.hpp>
+//#include <boost/gil/extension/io/png_dynamic_io.hpp>
+using namespace boost::gil;
+
+
 // Short alias for this namespace
 namespace pt = boost::property_tree;
 using json = nlohmann::json;
@@ -46,7 +87,7 @@ using json = nlohmann::json;
 #define HEIGHT 28
 
 /* origin is the upper left corner */
-unsigned char image[HEIGHT][WIDTH];
+unsigned char image_buffer[HEIGHT][WIDTH];
 
 /* Replace this function with something useful. */
 
@@ -60,7 +101,7 @@ void draw_bitmap(FT_Bitmap *bitmap, FT_Int x, FT_Int y) {
       if (i < 0 || j < 0 || i >= WIDTH || j >= HEIGHT)
         continue;
 
-      image[j][i] |= bitmap->buffer[q * bitmap->width + p];
+      image_buffer[j][i] |= bitmap->buffer[q * bitmap->width + p];
     }
   }
 }
@@ -70,7 +111,7 @@ void show_image(void) {
 
   for (i = 0; i < HEIGHT; i++) {
     for (j = 0; j < WIDTH; j++)
-      putchar(image[i][j] == 0 ? ' ' : image[i][j] < 64 ? '.' : (image[i][j] < 128 ? '+' : '*'));
+      putchar(image_buffer[i][j] == 0 ? ' ' : image_buffer[i][j] < 64 ? '.' : (image_buffer[i][j] < 128 ? '+' : '*'));
     putchar('\n');
   }
 }
@@ -97,7 +138,7 @@ void show_json(char *c) {
   fprintf(stdout, "  \"image\": [ ");
   for (i = 0; i < HEIGHT; i++) {
     for (j = 0; j < WIDTH; j++) {
-      fprintf(stdout, "%d", (int)image[i][j]);
+      fprintf(stdout, "%d", (int)image_buffer[i][j]);
       if (!((i == HEIGHT - 1 && j == WIDTH - 1)))
         fprintf(stdout, ",");
     }
@@ -114,7 +155,7 @@ struct Arg : public option::Arg {
   }
 };
 
-enum optionIndex { UNKNOWN, FONTFILE, OUTPUT, DICOMS, CONFIG, HELP, TARGETNUM };
+enum optionIndex { UNKNOWN, FONTFILE, OUTPUT, DICOMS, CONFIG, HELP, TARGETNUM, EXPORTTYPE };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
      "USAGE: renderText [options]\n\n"
@@ -128,6 +169,8 @@ const option::Descriptor usage[] = {
      "  --targetnum, -t \tNumber of images to be created."},
     {CONFIG, 0, "c", "config", Arg::Required,
      "  --config, -c \tConfig file to program text generation."},
+    {EXPORTTYPE, 0, "e", "export_type", Arg::Required,
+     "  --export_type, -e \tFile format for output (dcm by default, or png)."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
      "  ./renderText -d data/LIDC-IDRI-0006/01-01-2000-92500/3000556-20957/ -o /tmp/bla -c "
@@ -219,6 +262,7 @@ int main(int argc, char **argv) {
   std::string configfile_path = "";
   std::string output = "";    // directory path
   std::string font_path = ""; // "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
+  std::string target_type = "dcm";
   int target = 1;
 
   for (option::Option *opt = options[UNKNOWN]; opt; opt = opt->next())
@@ -275,6 +319,22 @@ int main(int argc, char **argv) {
         exit(-1);
       }
       break;
+    case EXPORTTYPE:
+      if (opt.arg) {
+        // fprintf(stdout, "--output '%s'\n", opt.arg);
+        target_type = opt.arg;
+        if (target_type != "png") {
+          target_type = "dcm";
+        } else {
+          fprintf(stdout, "Detected output type of png\n");
+        }
+      } else {
+        fprintf(stdout, "--target_type needs dcm or png\n");
+        exit(-1);
+      }
+      break;
+
+
     case UNKNOWN:
       // not possible because Arg::Unknown returns ARG_ILLEGAL
       // which aborts the parse with an error
@@ -468,7 +528,7 @@ int main(int argc, char **argv) {
 
     // the data is written into image so we need to clear it first before writing again in this
     // loop
-    memset(image, 0, HEIGHT * WIDTH);
+    memset(image_buffer, 0, HEIGHT * WIDTH);
 
     //
     // lets read in a random DICOM image (check that it is a DICOM image...)
@@ -632,7 +692,7 @@ int main(int argc, char **argv) {
       //        repeat_spacingx, repeat_spacingy, howmany);
       // generate text more than once here
       for (int text_lines = 0; text_lines < howmany; text_lines++) {
-        memset(image, 0, HEIGHT * WIDTH);
+        memset(image_buffer, 0, HEIGHT * WIDTH);
 
         int px = start_px;
         int py = start_py + (neg_y ? -1 : 1) * (text_lines * font_size +
@@ -730,7 +790,7 @@ int main(int argc, char **argv) {
         std::vector<int> boundingBox = {INT_MAX, INT_MAX, 0, 0}; // xmin, ymin, xmax, ymax
         for (int yi = 0; yi < HEIGHT; yi++) {
           for (int xi = 0; xi < WIDTH; xi++) {
-            if (image[yi][xi] == 0)
+            if (image_buffer[yi][xi] == 0)
               continue;
             // I would like to copy the value from image over to
             // the buffer. At some good location...
@@ -740,7 +800,7 @@ int main(int argc, char **argv) {
             if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
               continue;
             float f = 0.5;
-            if (image[yi][xi] == 0)
+            if (image_buffer[yi][xi] == 0)
               continue;
             if (newx < boundingBox[0])
               boundingBox[0] = newx;
@@ -751,7 +811,7 @@ int main(int argc, char **argv) {
             if (newx >= boundingBox[2])
               boundingBox[2] = newx;
 
-            float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image[yi][xi]) / 255.0 * 4095.0));
+            float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 255.0 * 4095.0));
             // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
             bvals[idx] = (signed short)std::max(0.0f, std::min(4095.0f, v));
             // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
@@ -771,7 +831,13 @@ int main(int argc, char **argv) {
         }
         //bbox["text"] = json::parse(text2print);
         bbox["name"] = std::string(o.str());
-        bbox["bbox"] = { boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3] };
+        bbox["xmin"] = boundingBox[0];
+        bbox["ymin"] = boundingBox[1];
+        bbox["xmax"] = boundingBox[2];
+        bbox["ymax"] = boundingBox[3];
+        bbox["width"] = xmax;
+        bbox["height"] = ymax;
+        bbox["filename"] = std::filesystem::path(files[pickImageIdx]).filename();
         bboxes[bboxes.size()] = bbox;
 
         // boundingBoxes.insert(std::pair<std::string, std::map<std::string, std::string>>(
@@ -833,6 +899,13 @@ int main(int argc, char **argv) {
 //  out.imbue(utf8_locale);
   out << std::setw(4) << boundingBoxes << std::endl;
   out.close();
+
+  // test writing png
+  rgb8_image_t img(512, 512);
+  rgb8_pixel_t red(255, 0, 0);
+  fill_pixels(view(img), red);
+  write_view("redsquare.png", const_view(img), png_tag{});
+
 
   return 0;
 }
