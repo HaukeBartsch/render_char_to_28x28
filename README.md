@@ -256,3 +256,8 @@ Examples:
 ```
 
 Some control over the text and placement on the DICOM images is part of the forwardModel.json control file. Most of the options listed in the control file are now implemented.
+
+Tip: Convert the bounding box json file to a csv by:
+```
+jq -r '[.[][]] | (map(keys) | add | unique) as $cols | map(. as $row | $cols | map($row[.])) as $rows | $cols, $rows[] | @csv' boundingBoxes.json
+```
