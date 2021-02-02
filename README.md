@@ -231,8 +231,9 @@ docker run --rm -it \
 The above will generate one pair of images in png format (16-bit color).
 
 Additionally to the information in the forwardModel.json for text placement some command line options can be used to specify for example how many image pairs should be generated.
-root@feb73b9ee0cf:~/render_char_to_28x28# ./renderText 
+
 ```
+root@xxxx:~/render_char_to_28x28# ./renderText 
 Create deep learning data from collection of DICOM files by adding text
 annotations.
 USAGE: renderText [options]
