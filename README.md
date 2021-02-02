@@ -1,12 +1,13 @@
 ### Render a text into a pixel area
 
-This program uses the freetype library and gdcm to render a character in a given font into a series of DICOM images.
+This program uses the freetype library and gdcm to render lines of characters in a given font into a series of DICOM images.
 
 ![Example](images/example.png)
 
-The output generates two folders with numbered files. One folder contains copies of input images and the second folder contains the same images with random text placed on them. The location of all the texts placed on each image is stored in a file called boundingBox.json.
+The output generates two folders with numbered files. One folder contains copies of input images and the second folder contains the same images with random text placed on them. The location of each line of text placed on each image is stored in a file called boundingBoxes.json.
 
-In order to control the generation of images a json control file is used. Here is a possible content:
+In order to control the generation of images a json control file is used. The file mimics some usual placements of text on medical images. This includes text in the 4 corners of the image and some short text in the middle. The file also specifies different fonts that should be used as well as font sizes.
+
 ```{json}
 {
   "model": "text in medical images",
@@ -207,6 +208,10 @@ In order to control the generation of images a json control file is used. Here i
   }
 }
 ```
+### Limitations
+
+The input files are assumed to be grayscale 16bit (DICOM, MONOCHROME2). The output can be either DICOM or png (16-bit, grayscale stored as color).
+
 
 ## Build the program
 
@@ -221,7 +226,32 @@ docker run --rm -it \
     -v /input/data/folder:/data \
     -v /output/data/folder:/output \
     render_char_to_28x28 /bin/bash -c \
-  "/root/render_char_to_28x28/renderText -d /data -o /output -c forwardModel.json -t 1"
+  "/root/render_char_to_28x28/renderText -d /data -s png -o /output -c forwardModel.json -t 1"
+```
+The above will generate one pair of images in png format (16-bit color).
+
+Additionally to the information in the forwardModel.json for text placement some command line options can be used to specify for example how many image pairs should be generated.
+root@feb73b9ee0cf:~/render_char_to_28x28# ./renderText 
+```
+Create deep learning data from collection of DICOM files by adding text
+annotations.
+USAGE: renderText [options]
+
+Options:
+  --help            Print this help message.
+  --dicom, -d       Directory with DICOM files.
+  --output, -o      Output directory.
+  --fontfile, -f    Name of the font to be used - needs to be available locally.
+  --targetnum, -t   Number of images to be created. Images are chosen at random
+                    from DICOM input folder.
+  --config, -c      Config file to specify text generation, font sizes etc..
+  --export_type, -e File format for output (dcm by default, or png).
+  --random_seed, -s Specify random seed for text placement. If not used a time
+                    based seed is used instead.
+
+Examples:
+  ./renderText -d data/LIDC-IDRI-0009 -c forwardModel.json -o /tmp/bla -t 100
+  ./renderText --help
 ```
 
-Some control over the text and placement on the DICOM images is part of the forwardModel.json control file. Warning: Many of the options listed in this control file are not yet implemented.
+Some control over the text and placement on the DICOM images is part of the forwardModel.json control file. Most of the options listed in the control file are now implemented.
