@@ -2,6 +2,13 @@
     "model": "text in medical images",
     "description": "Describe a sequence that will be sufficient to generate an image with burned in information.",
     "logic": {
+        "image_contrasts": [
+            {
+                "name": "bone",
+                "min": [ -0.2, 0.2 ],
+                "max": [ 0.8, 1.2 ]
+            }
+        ],
         "font": [
             {
                 "name": "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",

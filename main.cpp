@@ -60,8 +60,7 @@ int main()
 // export as an image
 #include <boost/gil.hpp>
 #include <boost/gil/extension/io/png.hpp>
-#include <boost/gil/extension/dynamic_image/any_image.hpp>
-#include <boost/gil/image_view.hpp>
+
 
 
 #include <boost/mpl/vector.hpp>
@@ -155,26 +154,28 @@ struct Arg : public option::Arg {
   }
 };
 
-enum optionIndex { UNKNOWN, FONTFILE, OUTPUT, DICOMS, CONFIG, HELP, TARGETNUM, EXPORTTYPE };
+enum optionIndex { UNKNOWN, FONTFILE, OUTPUT, DICOMS, CONFIG, HELP, TARGETNUM, EXPORTTYPE, RANDOMSEED };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
+     "Create deep learning data from collection of DICOM files by adding text annotations.\n"
      "USAGE: renderText [options]\n\n"
      "Options:"},
-    {HELP, 0, "", "help", Arg::None, "  --help  \tAdd random text to DICOM files and store again."},
+    {HELP, 0, "", "help", Arg::None, "  --help  \tPrint this help message."},
     {DICOMS, 0, "d", "dicom", Arg::Required, "  --dicom, -d  \tDirectory with DICOM files."},
     {OUTPUT, 0, "o", "output", Arg::Required, "  --output, -o  \tOutput directory."},
     {FONTFILE, 0, "f", "fontfile", Arg::Required,
      "  --fontfile, -f  \tName of the font to be used - needs to be available locally."},
     {TARGETNUM, 0, "t", "targetnum", Arg::Required,
-     "  --targetnum, -t \tNumber of images to be created."},
+     "  --targetnum, -t \tNumber of images to be created. Images are chosen at random from DICOM input folder."},
     {CONFIG, 0, "c", "config", Arg::Required,
-     "  --config, -c \tConfig file to program text generation."},
+     "  --config, -c \tConfig file to specify text generation, font sizes etc.."},
     {EXPORTTYPE, 0, "e", "export_type", Arg::Required,
      "  --export_type, -e \tFile format for output (dcm by default, or png)."},
+    {RANDOMSEED, 0, "s", "random_seed", Arg::Required,
+     "  --random_seed, -s \tSpecify random seed for text placement. If not used a time based seed is used instead."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
-     "  ./renderText -d data/LIDC-IDRI-0006/01-01-2000-92500/3000556-20957/ -o /tmp/bla -c "
-     "forwardModel.json\n"
+     "  ./renderText -d data/LIDC-IDRI-0009 -c forwardModel.json -o /tmp/bla -t 100\n"
      "  ./renderText --help\n"},
     {0, 0, 0, 0, 0, 0}};
 
@@ -240,7 +241,7 @@ std::vector<std::u32string> generateRandomText(int len) {
 int main(int argc, char **argv) {
   setlocale(LC_NUMERIC, "en_US.utf-8");
   // std::srand(std::time(0));
-  std::srand((unsigned)time(NULL) * getpid());
+  // std::srand((unsigned)time(NULL) * getpid());
 
   argc -= (argc > 0);
   argv += (argc > 0); // skip program name argv[0] if present
@@ -262,7 +263,9 @@ int main(int argc, char **argv) {
   std::string configfile_path = "";
   std::string output = "";    // directory path
   std::string font_path = ""; // "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
+  unsigned int random_seed = (unsigned)time(NULL) * getpid();
   std::string target_type = "dcm";
+
   int target = 1;
 
   for (option::Option *opt = options[UNKNOWN]; opt; opt = opt->next())
@@ -310,6 +313,15 @@ int main(int argc, char **argv) {
         exit(-1);
       }
       break;
+    case RANDOMSEED:
+      if (opt.arg) {
+        // fprintf(stdout, "--output '%s'\n", opt.arg);
+        random_seed = std::stoi(opt.arg);
+      } else {
+        fprintf(stdout, "--random_seed needs a number as an argument\n");
+        exit(-1);
+      }
+      break;
     case CONFIG:
       if (opt.arg) {
         // fprintf(stdout, "--output '%s'\n", opt.arg);
@@ -333,14 +345,13 @@ int main(int argc, char **argv) {
         exit(-1);
       }
       break;
-
-
     case UNKNOWN:
       // not possible because Arg::Unknown returns ARG_ILLEGAL
       // which aborts the parse with an error
       break;
     }
   }
+  std::srand(random_seed);
   int font_size = 12;
   int face_index;
 
@@ -475,6 +486,41 @@ int main(int argc, char **argv) {
     }
   }
   fprintf(stdout, "  Found %ld placements\n", placements.size());
+
+  //
+  // Read in the image contrasts
+  //
+  std::vector<std::vector<float>> image_contrasts; // lower [min%, max%], upper [min%, max%]
+  if (configFileExists) {
+    pt::read_json(configfile_path.c_str(), root);
+    auto bounds = root.get_child("logic").get_child("image_contrasts").equal_range("");
+    for (auto iter = bounds.first; iter != bounds.second; ++iter) {
+      std::string fname = iter->second.get_child("name").get_value<std::string>();
+      // now read the sizes for this font
+      auto bounds2 = iter->second.get_child("min").equal_range("");
+      std::vector<float> this_contrast;
+      for (auto iter2 = bounds2.first; iter2 != bounds2.second; ++iter2) {
+        float val = iter2->second.get_value<float>();
+        this_contrast.push_back(val);
+      }
+      //
+      auto bounds3 = iter->second.get_child("max").equal_range("");
+      for (auto iter3 = bounds3.first; iter3 != bounds3.second; ++iter3) {
+        float val = iter3->second.get_value<float>();
+        this_contrast.push_back(val);
+      }
+      image_contrasts.push_back(this_contrast);
+    }
+  }
+  fprintf(stdout, "Found %ld contrast range%s to choose from.\n", image_contrasts.size(), image_contrasts.size()>1?"s":"");
+  float image_contrastx; // a single choice, value between  the two specified, something like 0.1
+  float image_contrasty; // a single choice
+  {
+    int idx = std::rand() % image_contrasts.size();
+    image_contrastx = image_contrasts[idx][0] + (( (1.0f * std::rand()) / (1.0f * RAND_MAX) ) * (image_contrasts[idx][1] - image_contrasts[idx][0]));
+    image_contrasty = image_contrasts[idx][2] + (( (1.0f * std::rand()) / (1.0f * RAND_MAX) ) * (image_contrasts[idx][3] - image_contrasts[idx][2]));
+    fprintf(stdout, "Selected image contrast of %f %f\n", image_contrastx, image_contrasty);
+  }
   // we should find all DICOM files
   fprintf(stdout, "\n");
   std::vector<std::string> files = listFilesSTD(dicom_path);
@@ -603,6 +649,14 @@ int main(int argc, char **argv) {
 
       continue;
     }
+    unsigned short xmax;
+    unsigned short ymax;
+
+    // image dimensions
+    std::vector<unsigned int> extent = gdcm::ImageHelper::GetDimensionsValue(reader.GetFile());
+
+    xmax = (unsigned short)extent[0];
+    ymax = (unsigned short)extent[1];
 
     gdcm::PixelFormat pf = change_image.GetPixelFormat();
     // pf could be gdcm::PixelFormat::INT8, or INT16, etc...
@@ -615,6 +669,31 @@ int main(int argc, char **argv) {
     char *buffer = new char[len];
 
     change_image.GetBuffer(buffer);
+
+    // what is max and min here? (don't change by the overlay)
+    float current_image_min_value, current_image_max_value;
+    {
+      signed short *bvals = (signed short *)buffer;
+      current_image_min_value = (float)bvals[0];
+      current_image_max_value = (float)bvals[0]; 
+      for (int p = 1; p < xmax*ymax; p++) {
+        if (current_image_min_value > bvals[p]) current_image_min_value = bvals[p];
+        if (current_image_max_value < bvals[p]) current_image_max_value = bvals[p];  
+      }
+    }
+
+    // apply an image contrast change before using the buffer values
+    {
+      signed short *bvals = (signed short *)buffer;
+      float new_min = current_image_min_value + ((current_image_max_value - current_image_min_value) * image_contrastx);
+      float new_max = current_image_max_value - ((current_image_max_value - current_image_min_value) * (1.0f-image_contrasty));
+      //fprintf(stdout, "new min: %f, new_max: %f (old %f %f)\n", new_min, new_max, current_image_min_value, current_image_max_value);
+      for (int p = 0; p < xmax*ymax; p++) {
+        float A = (bvals[p] - current_image_min_value) / (current_image_max_value - current_image_min_value);
+        float nv = new_min + (A *(new_max - new_min));
+        bvals[p] = (signed short)std::max(0.0f, std::min(nv, current_image_max_value));
+      }
+    }
 
     //
     // write the image pair
@@ -637,27 +716,41 @@ int main(int argc, char **argv) {
 
     char outputfilename[1024];
 
-    gdcm::ImageWriter writer2;
-    writer2.SetImage(change.GetOutput());
-    writer2.SetFile(reader.GetFile());
-    snprintf(outputfilename, 1024 - 1, "%s/without_text/%08d.dcm", output.c_str(), i);
-    writer2.SetFileName(outputfilename);
-    if (!writer2.Write()) {
-      return 1;
+    if (target_type == "dcm") {
+      gdcm::ImageWriter writer2;
+      writer2.SetImage(change.GetOutput());
+      writer2.SetFile(reader.GetFile());
+      snprintf(outputfilename, 1024 - 1, "%s/without_text/%08d.dcm", output.c_str(), i);
+      writer2.SetFileName(outputfilename);
+      if (!writer2.Write()) {
+        return 1;
+      }
+    } else {
+      snprintf(outputfilename, 1024 - 1, "%s/without_text/%08d.png", output.c_str(), i);
+      rgb16_image_t img(xmax, ymax);
+      rgb16_pixel_t rgb(65535, 0, 0);
+      // we should copy the values over now --- from the buffer? Or from the DICOM Image
+      //fill_pixels(view(img), red);
+      signed short *bvals = (signed short *)buffer;
+      // stretch the intensities from 0 to max for png (0...65535)
+      float pmin = current_image_min_value;
+      float pmax = current_image_max_value; 
+      auto v = view(img);
+      auto it = v.begin();
+      while (it != v.end()) {
+        //++hist[*it];
+        float pixel_val = ((1.0*bvals[0])-pmin) / (pmax - pmin);
+        *it = rgb16_pixel_t{(short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535)};
+        bvals++;
+        it++;
+      }
+      write_view(outputfilename, const_view(img), png_tag{});
     }
-    unsigned short xmax;
-    unsigned short ymax;
-
-    // image dimensions
-    std::vector<unsigned int> extent = gdcm::ImageHelper::GetDimensionsValue(reader.GetFile());
-
-    xmax = (unsigned short)extent[0];
-    ymax = (unsigned short)extent[1];
     // fprintf(stdout, "  dimensions: %d %d, len: %lu\n", xmax, ymax, len);
 
     // lets do all the text placements
     for (int placement = 0; placement < placements.size(); placement++) {
-      fprintf(stdout, "Use placement: %d\n", placement);
+      fprintf(stdout, "  Use placement: %d\n", placement);
       float vx_min = placements[placement]["x"][0];
       float vx_max = placements[placement]["x"][1];
       float vx = vx_min + ((rand() * 1.0f) / (1.0f * RAND_MAX)) * (vx_max - vx_min);
@@ -785,6 +878,17 @@ int main(int argc, char **argv) {
         //}
         FT_Done_Face(face);
 
+        // image min max is 0 .. 255
+        /*float pmi = image_buffer[0][0];
+        float pma = image_buffer[0][0];
+        for (int yi = 0; yi < HEIGHT; yi++) {
+          for (int xi = 0; xi < WIDTH; xi++) {
+            if (pmi > image_buffer[yi][xi]) pmi = image_buffer[yi][xi];
+            if (pma < image_buffer[yi][xi]) pma = image_buffer[yi][xi];
+          }
+        }
+        fprintf(stdout, "bitmap font min %f and max %f\n", pmi, pma); */
+
         // now copy the string in
         signed short *bvals = (signed short *)buffer;
         std::vector<int> boundingBox = {INT_MAX, INT_MAX, 0, 0}; // xmin, ymin, xmax, ymax
@@ -799,7 +903,6 @@ int main(int argc, char **argv) {
             int idx = newy * xmax + newx;
             if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
               continue;
-            float f = 0.5;
             if (image_buffer[yi][xi] == 0)
               continue;
             if (newx < boundingBox[0])
@@ -811,19 +914,24 @@ int main(int argc, char **argv) {
             if (newx >= boundingBox[2])
               boundingBox[2] = newx;
 
-            float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 255.0 * 4095.0));
+            // instead of blending we need to use a fixed overlay color
+            // we have image information between current_image_min_value and current_image_max_value
+            // we need to scale the image_buffer by those values.
+            float f = 0;
+            //float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 512.0 * current_image_max_value));
+            float v = 1.0f * image_buffer[yi][xi] / 255.0;
+            float w = 1.0f * bvals[idx] / current_image_max_value; 
             // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
-            bvals[idx] = (signed short)std::max(0.0f, std::min(4095.0f, v));
+            bvals[idx] = (signed short)std::max(0.0f, std::min(current_image_max_value, current_image_min_value + (v + w*(1.0f-v)) * (current_image_max_value - current_image_min_value)  ));
             // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
           }
         }
         // we have a bounding box now for the text on this picture
-        fprintf(stdout, "  bounding box: %d %d %d %d\n", boundingBox[0], boundingBox[1],
-                boundingBox[2], boundingBox[3]);
         if (boundingBox[0] == INT_MAX) {
-          // nothing got written, empty bounding box, don't safe
           continue;
         }
+        fprintf(stdout, "  bounding box: %d %d %d %d\n", boundingBox[0], boundingBox[1],
+                boundingBox[2], boundingBox[3]);
         // bbox.insert(files[pickImageIdx].c_str()
         json bbox = json::object();
         std::ostringstream o;
@@ -839,7 +947,7 @@ int main(int argc, char **argv) {
         bbox["ymin"] = boundingBox[1];
         bbox["xmax"] = boundingBox[2];
         bbox["ymax"] = boundingBox[3];
-        bbox["width"] = xmax;
+        bbox["width"] = xmax; // of the image
         bbox["height"] = ymax;
         bbox["filename"] = std::filesystem::path(files[pickImageIdx]).filename();
         bboxes[bboxes.size()] = bbox;
@@ -857,7 +965,6 @@ int main(int argc, char **argv) {
     gdcm::DataElement pixeldata(gdcm::Tag(0x7fe0, 0x0010));
     pixeldata.SetByteValue(buffer, len);
 
-    delete[] buffer;
     gdcm::SmartPointer<gdcm::Image> im = new gdcm::Image;
     im->SetNumberOfDimensions(2);
     im->SetDimension(0, xmax);
@@ -884,14 +991,39 @@ int main(int argc, char **argv) {
     ss2.SetValue(uid.Generate());
     ds.Replace(ss2.GetAsDataElement());
 
-    gdcm::ImageWriter writer;
-    writer.SetImage(*im);
-    writer.SetFile(reader.GetFile());
-    snprintf(outputfilename, 1024 - 1, "%s/with_text/%08d.dcm", output.c_str(), i);
-    writer.SetFileName(outputfilename);
-    if (!writer.Write()) {
-      return 1;
+
+    if (target_type == "dcm") {
+      snprintf(outputfilename, 1024 - 1, "%s/with_text/%08d.dcm", output.c_str(), i);
+      gdcm::ImageWriter writer;
+      writer.SetImage(*im);
+      writer.SetFile(reader.GetFile());
+      // snprintf(outputfilename, 1024 - 1, "%s/with_text/%08d.dcm", output.c_str(), i);
+      writer.SetFileName(outputfilename);
+      if (!writer.Write()) {
+        return 1;
+      }
+    } else {
+      snprintf(outputfilename, 1024 - 1, "%s/with_text/%08d.png", output.c_str(), i);
+      rgb16_image_t img(xmax, ymax);
+      rgb16_pixel_t rgb(65535, 0, 0);
+      // we should copy the values over now --- from the buffer? Or from the DICOM Image
+      //fill_pixels(view(img), red);
+      signed short *bvals = (signed short *)buffer;
+      // stretch the intensities from 0 to max for png (0...65535)
+      float pmin = current_image_min_value;
+      float pmax = current_image_max_value; 
+      auto v = view(img);
+      auto it = v.begin();
+      while (it != v.end()) {
+        //++hist[*it];
+        float pixel_val = ((1.0*bvals[0])-pmin) / (pmax - pmin);
+        *it = rgb16_pixel_t{(short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535)};
+        bvals++;
+        it++;
+      }
+      write_view(outputfilename, const_view(img), png_tag{});
     }
+    delete[] buffer;
   }
   FT_Done_FreeType(library);
 
@@ -905,10 +1037,10 @@ int main(int argc, char **argv) {
   out.close();
 
   // test writing png
-  rgb8_image_t img(512, 512);
-  rgb8_pixel_t red(255, 0, 0);
-  fill_pixels(view(img), red);
-  write_view("redsquare.png", const_view(img), png_tag{});
+  //rgb8_image_t img(512, 512);
+  //rgb8_pixel_t red(255, 0, 0);
+  //fill_pixels(view(img), red);
+  //write_view("redsquare.png", const_view(img), png_tag{});
 
 
   return 0;
