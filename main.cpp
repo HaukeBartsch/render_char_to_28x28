@@ -521,6 +521,43 @@ int main(int argc, char **argv) {
     image_contrasty = image_contrasts[idx][2] + (( (1.0f * std::rand()) / (1.0f * RAND_MAX) ) * (image_contrasts[idx][3] - image_contrasts[idx][2]));
     fprintf(stdout, "Selected image contrast of %f %f\n", image_contrastx, image_contrasty);
   }
+
+  //
+  // Read in the colors
+  //
+  std::vector<std::vector<float>> colors; // the background and pen color for the annotations
+  if (configFileExists) {
+    pt::read_json(configfile_path.c_str(), root);
+    auto bounds = root.get_child("logic").get_child("colors").equal_range("");
+    for (auto iter = bounds.first; iter != bounds.second; ++iter) {
+      std::string fname = iter->second.get_child("name").get_value<std::string>();
+      // now read the sizes for this font
+      auto bounds2 = iter->second.get_child("background_size").equal_range("");
+      std::vector<float> this_background_size;
+      for (auto iter2 = bounds2.first; iter2 != bounds2.second; ++iter2) {
+        float val = iter2->second.get_value<float>();
+        this_background_size.push_back(val);
+      }
+      //
+      auto bounds3 = iter->second.get_child("background_color").equal_range("");
+      for (auto iter3 = bounds3.first; iter3 != bounds3.second; ++iter3) {
+        float val = iter3->second.get_value<float>();
+        this_background_size.push_back(val);
+      }
+      //
+      auto bounds4 = iter->second.get_child("pen_color").equal_range("");
+      for (auto iter4 = bounds4.first; iter4 != bounds4.second; ++iter4) {
+        float val = iter4->second.get_value<float>();
+        this_background_size.push_back(val);
+      }
+      colors.push_back(this_background_size);
+    }
+  }
+  fprintf(stdout, "Found %ld color setting%s to choose from.\n", colors.size(), colors.size() > 1 ? "s" : "");
+  std::vector<float> color_background_size;  // a single choice, value between  the two specified, something like 0.1
+  std::vector<float> color_background_color; // a single choice
+  std::vector<float> color_pen_color;
+
   // we should find all DICOM files
   fprintf(stdout, "\n");
   std::vector<std::string> files = listFilesSTD(dicom_path);
@@ -750,6 +787,17 @@ int main(int argc, char **argv) {
 
     // lets do all the text placements
     for (int placement = 0; placement < placements.size(); placement++) {
+      { // color setting by placement
+        int idx = std::rand() % colors.size();
+        fprintf(stdout, "  Select color set %d, opacity of background: %f\n", idx, colors[idx][7]);
+        // size here is how much bigger the background is supposed to be compared to the bounding box of the text.
+        // we draw the image, draw the background and draw the text (in that order)
+        color_background_size = {colors[idx][0], colors[idx][1], colors[idx][2], colors[idx][3]};
+        // a size of 0,0,0,0 indicates that no background needs to be drawn (default normal mode, text is white)
+        color_background_color = {colors[idx][4], colors[idx][5], colors[idx][6], colors[idx][7]};
+        color_pen_color = {colors[idx][8], colors[idx][9], colors[idx][10], colors[idx][11]};
+      }
+
       fprintf(stdout, "  Use placement: %d\n", placement);
       float vx_min = placements[placement]["x"][0];
       float vx_max = placements[placement]["x"][1];
@@ -892,7 +940,7 @@ int main(int argc, char **argv) {
         // now copy the string in
         signed short *bvals = (signed short *)buffer;
         std::vector<int> boundingBox = {INT_MAX, INT_MAX, 0, 0}; // xmin, ymin, xmax, ymax
-        for (int yi = 0; yi < HEIGHT; yi++) {
+        for (int yi = 0; yi < HEIGHT; yi++) {                    // compute the bounding box
           for (int xi = 0; xi < WIDTH; xi++) {
             if (image_buffer[yi][xi] == 0)
               continue;
@@ -909,20 +957,78 @@ int main(int argc, char **argv) {
               boundingBox[0] = newx;
             if (newy < boundingBox[1])
               boundingBox[1] = newy;
-            if (newy >= boundingBox[3])
-              boundingBox[3] = newy;
             if (newx >= boundingBox[2])
               boundingBox[2] = newx;
+            if (newy >= boundingBox[3])
+              boundingBox[3] = newy;
+          }
+        }
+
+        // draw the background
+        if (fabs(color_background_color[3]) > 1e-6) {
+          // check if we should draw the background at all - might be
+          // that the color is transparent and we don't have to do anything here
+          // fprintf(stdout, "  Add a background %f %f %f %f for this text line.\n", color_background_color[0], color_background_color[1],
+          //        color_background_color[2], color_background_color[3]);
+          // we need to make the boundingBox from above larger by the color_background_size fields
+          float rnx1 = (1.0f * rand()) / (1.0f * RAND_MAX);
+          float rnx2 = (1.0f * rand()) / (1.0f * RAND_MAX);
+          float rny1 = (1.0f * rand()) / (1.0f * RAND_MAX);
+          float rny2 = (1.0f * rand()) / (1.0f * RAND_MAX);
+          std::vector<int> backgroundBoundingBox = {
+              (int)std::round(boundingBox[0] - (color_background_size[0] + rnx1 * (color_background_size[1] - color_background_size[0]))),
+              (int)std::round(boundingBox[1] - (color_background_size[2] + rny1 * (color_background_size[3] - color_background_size[2]))),
+              (int)std::round(boundingBox[2] + (color_background_size[0] + rnx2 * (color_background_size[1] - color_background_size[0]))),
+              (int)std::round(boundingBox[3] + (color_background_size[2] + rny2 * (color_background_size[3] - color_background_size[2])))};
+          // fprintf(stdout, "%d %d %d %d -> %d %d %d %d\n", boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3], backgroundBoundingBox[0],
+          //        backgroundBoundingBox[1], backgroundBoundingBox[2], backgroundBoundingBox[3]);
+          for (int yi = 0; yi < ymax; yi++) {
+            for (int xi = 0; xi < xmax; xi++) {
+              if (xi < backgroundBoundingBox[0] || xi > backgroundBoundingBox[2] || yi < backgroundBoundingBox[1] || yi > backgroundBoundingBox[3])
+                continue;
+              int newx = xi;
+              int newy = yi;
+              int idx = newy * xmax + newx;
+              if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+                continue;
+              // for the background color 255 means white (so max value), 0 mean black so min value
+              bvals[idx] = (signed short)std::max(
+                  0.0f, std::min(current_image_max_value, current_image_min_value + ((1.0f * color_background_color[0]) / (1.0f * 255) *
+                                                                                     (current_image_max_value - current_image_min_value))));
+            }
+          }
+        }
+
+        // draw the text
+        for (int yi = 0; yi < HEIGHT; yi++) {
+          for (int xi = 0; xi < WIDTH; xi++) {
+            if (image_buffer[yi][xi] == 0)
+              continue;
+            // I would like to copy the value from image over to
+            // the buffer. At some good location...
+            int newx = px + xi;
+            int newy = py + yi;
+            int idx = newy * xmax + newx;
+            if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+              continue;
+            if (image_buffer[yi][xi] == 0)
+              continue;
 
             // instead of blending we need to use a fixed overlay color
             // we have image information between current_image_min_value and current_image_max_value
             // we need to scale the image_buffer by those values.
             float f = 0;
             //float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 512.0 * current_image_max_value));
-            float v = 1.0f * image_buffer[yi][xi] / 255.0;
-            float w = 1.0f * bvals[idx] / current_image_max_value; 
+            float v = 1.0f * image_buffer[yi][xi] / 255.0; // 0 to 1 for color, could be inverted if we have a white background
+            float w = 1.0f * bvals[idx] / current_image_max_value;
+            float alpha_blend = (v + w * (1.0f - v));
+            if (color_pen_color[0] == 0) { // instead of white on black do now black on white
+              alpha_blend = 1.0f - v;
+            }
+
             // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
-            bvals[idx] = (signed short)std::max(0.0f, std::min(current_image_max_value, current_image_min_value + (v + w*(1.0f-v)) * (current_image_max_value - current_image_min_value)  ));
+            bvals[idx] = (signed short)std::max(
+                0.0f, std::min(current_image_max_value, current_image_min_value + (alpha_blend) * (current_image_max_value - current_image_min_value)));
             // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
           }
         }
@@ -947,8 +1053,12 @@ int main(int argc, char **argv) {
         bbox["ymin"] = boundingBox[1];
         bbox["xmax"] = boundingBox[2];
         bbox["ymax"] = boundingBox[3];
-        bbox["width"] = xmax; // of the image
-        bbox["height"] = ymax;
+        bbox["x"] = boundingBox[0] + std::round((boundingBox[2] - boundingBox[0]) / 2);
+        bbox["y"] = boundingBox[1] + std::round((boundingBox[3] - boundingBox[1]) / 2);
+        bbox["width"] = std::round((boundingBox[2] - boundingBox[0]) / 2);
+        bbox["height"] = std::round((boundingBox[3] - boundingBox[1]) / 2);
+        bbox["imagewidth"] = xmax; // of the image
+        bbox["imageheight"] = ymax;
         bbox["filename"] = std::filesystem::path(files[pickImageIdx]).filename();
         bboxes[bboxes.size()] = bbox;
 

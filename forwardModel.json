@@ -16,25 +16,37 @@
                     6,
                     8,
                     11,
-                    12,
-                    15
+                    12
                 ],
                 "face_indexes": [
                     0
                 ]
             },
-            {
+            { 
                 "name": "/root/render_char_to_28x28/data/Menlo.ttc",
                 "sizes": [
                     6,
                     8,
                     11,
-                    12,
-                    15
+                    12
                 ],
                 "face_indexes": [
                     0
                 ]
+            }
+        ],
+        "colors": [
+            {
+                "name": "normal",
+                "background_size": [0, 0, 0, 0],
+                "background_color": [0, 0, 0, 0],
+                "pen_color": [255, 255, 255, 1]
+            },
+            {
+                "name": "inverted",
+                "background_size": [5, 10, 0, 1],
+                "background_color": [255, 255, 255, 1],
+                "pen_color": [0, 0, 0, 1]
             }
         ],
         "placement": {
