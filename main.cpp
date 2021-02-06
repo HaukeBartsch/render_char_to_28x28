@@ -381,6 +381,14 @@ int main(int argc, char **argv) {
       auto bounds = root.get_child("logic").get_child("font").equal_range("");
       for (auto iter = bounds.first; iter != bounds.second; ++iter) {
         std::string fname = iter->second.get_child("name").get_value<std::string>();
+        // check if the file exists first
+        struct stat buf;
+        if (!(stat(fname.c_str(), &buf) == 0)) {
+          fprintf(stderr,
+                  "Warning: font \"%s\" not found.\n", fname.c_str());
+          continue;
+        }
+
         font_paths.push_back(fname);
         // now read the sizes for this font
         auto bounds2 = iter->second.get_child("sizes").equal_range("");

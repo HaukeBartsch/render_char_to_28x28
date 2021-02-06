@@ -210,7 +210,7 @@ In order to control the generation of images a json control file is used. The fi
 ```
 ### Limitations
 
-The input files are assumed to be grayscale 16bit (DICOM, MONOCHROME2). The output can be either DICOM or png (16-bit, grayscale stored as color). The "types" specification in the file above is not yet implemented - only random text is supported currently.
+The input files are assumed to be grayscale 16bit or 8bit (DICOM, MONOCHROME2). The output can be either DICOM or png (16-bit, grayscale stored as color). The "types" specification in the file above is not yet implemented - only random text is supported currently.
 
 
 ## Build the program
