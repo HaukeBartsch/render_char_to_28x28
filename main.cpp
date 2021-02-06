@@ -706,29 +706,55 @@ int main(int argc, char **argv) {
     char *buffer = new char[len];
 
     change_image.GetBuffer(buffer);
+    int bitsAllocated = change_image.GetPixelFormat().GetBitsAllocated(); // could be 8 or 16
 
     // what is max and min here? (don't change by the overlay)
     float current_image_min_value, current_image_max_value;
     {
-      signed short *bvals = (signed short *)buffer;
-      current_image_min_value = (float)bvals[0];
-      current_image_max_value = (float)bvals[0]; 
-      for (int p = 1; p < xmax*ymax; p++) {
-        if (current_image_min_value > bvals[p]) current_image_min_value = bvals[p];
-        if (current_image_max_value < bvals[p]) current_image_max_value = bvals[p];  
+      if (bitsAllocated == 16) {
+        signed short *bvals = (signed short *)buffer;
+        current_image_min_value = (float)bvals[0];
+        current_image_max_value = (float)bvals[0]; 
+        for (int p = 1; p < xmax*ymax; p++) {
+          if (current_image_min_value > bvals[p]) current_image_min_value = bvals[p];
+          if (current_image_max_value < bvals[p]) current_image_max_value = bvals[p];  
+        }
+      } else if (bitsAllocated == 8) {
+        unsigned char *bvals = (unsigned char *)buffer;
+        current_image_min_value = (float)bvals[0];
+        current_image_max_value = (float)bvals[0]; 
+        for (int p = 1; p < xmax*ymax; p++) {
+          if (current_image_min_value > bvals[p]) current_image_min_value = bvals[p];
+          if (current_image_max_value < bvals[p]) current_image_max_value = bvals[p];  
+        }
+      } else {
+        fprintf(stdout, "Error: this bits allocated value is not supported %d.\n", bitsAllocated);
+        continue;
       }
     }
 
     // apply an image contrast change before using the buffer values
     {
-      signed short *bvals = (signed short *)buffer;
-      float new_min = current_image_min_value + ((current_image_max_value - current_image_min_value) * image_contrastx);
-      float new_max = current_image_max_value - ((current_image_max_value - current_image_min_value) * (1.0f-image_contrasty));
-      //fprintf(stdout, "new min: %f, new_max: %f (old %f %f)\n", new_min, new_max, current_image_min_value, current_image_max_value);
-      for (int p = 0; p < xmax*ymax; p++) {
-        float A = (bvals[p] - current_image_min_value) / (current_image_max_value - current_image_min_value);
-        float nv = new_min + (A *(new_max - new_min));
-        bvals[p] = (signed short)std::max(0.0f, std::min(nv, current_image_max_value));
+      if (bitsAllocated == 16) {
+        signed short *bvals = (signed short *)buffer;
+        float new_min = current_image_min_value + ((current_image_max_value - current_image_min_value) * image_contrastx);
+        float new_max = current_image_max_value - ((current_image_max_value - current_image_min_value) * (1.0f-image_contrasty));
+        //fprintf(stdout, "new min: %f, new_max: %f (old %f %f)\n", new_min, new_max, current_image_min_value, current_image_max_value);
+        for (int p = 0; p < xmax*ymax; p++) {
+          float A = (bvals[p] - current_image_min_value) / (current_image_max_value - current_image_min_value);
+          float nv = new_min + (A *(new_max - new_min));
+          bvals[p] = (signed short)std::max(0.0f, std::min(nv, current_image_max_value));
+        }
+      } else if (bitsAllocated == 8) {
+        unsigned char *bvals = (unsigned char *)buffer;
+        float new_min = current_image_min_value + ((current_image_max_value - current_image_min_value) * image_contrastx);
+        float new_max = current_image_max_value - ((current_image_max_value - current_image_min_value) * (1.0f-image_contrasty));
+        //fprintf(stdout, "new min: %f, new_max: %f (old %f %f)\n", new_min, new_max, current_image_min_value, current_image_max_value);
+        for (int p = 0; p < xmax*ymax; p++) {
+          float A = (bvals[p] - current_image_min_value) / (current_image_max_value - current_image_min_value);
+          float nv = new_min + (A *(new_max - new_min));
+          bvals[p] = (unsigned char)std::max(0.0f, std::min(nv, current_image_max_value));
+        }
       }
     }
 
@@ -768,20 +794,32 @@ int main(int argc, char **argv) {
       rgb16_pixel_t rgb(65535, 0, 0);
       // we should copy the values over now --- from the buffer? Or from the DICOM Image
       //fill_pixels(view(img), red);
-      signed short *bvals = (signed short *)buffer;
       // stretch the intensities from 0 to max for png (0...65535)
       float pmin = current_image_min_value;
       float pmax = current_image_max_value; 
       auto v = view(img);
       auto it = v.begin();
-      while (it != v.end()) {
-        //++hist[*it];
-        float pixel_val = ((1.0*bvals[0])-pmin) / (pmax - pmin);
-        *it = rgb16_pixel_t{(short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535)};
-        bvals++;
-        it++;
+      if (bitsAllocated == 16) {
+        signed short *bvals = (signed short *)buffer;
+        while (it != v.end()) {
+          //++hist[*it];
+          float pixel_val = ((1.0*bvals[0])-pmin) / (pmax - pmin);
+          *it = rgb16_pixel_t{(short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535)};
+          bvals++;
+          it++;
+        }
+        write_view(outputfilename, const_view(img), png_tag{});
+      } else if (bitsAllocated == 8) {
+        unsigned char *bvals = (unsigned char *)buffer;
+        while (it != v.end()) {
+          //++hist[*it];
+          float pixel_val = ((1.0*bvals[0])-pmin) / (pmax - pmin);
+          *it = rgb8_pixel_t{(unsigned char)(pixel_val*255), (unsigned char)(pixel_val*255), (unsigned char)(pixel_val*255)};
+          bvals++;
+          it++;
+        }
+        write_view(outputfilename, const_view(img), png_tag{});
       }
-      write_view(outputfilename, const_view(img), png_tag{});
     }
     // fprintf(stdout, "  dimensions: %d %d, len: %lu\n", xmax, ymax, len);
 
@@ -936,31 +974,58 @@ int main(int argc, char **argv) {
           }
         }
         fprintf(stdout, "bitmap font min %f and max %f\n", pmi, pma); */
+        std::vector<int> boundingBox = {INT_MAX, INT_MAX, 0, 0}; // xmin, ymin, xmax, ymax
 
         // now copy the string in
-        signed short *bvals = (signed short *)buffer;
-        std::vector<int> boundingBox = {INT_MAX, INT_MAX, 0, 0}; // xmin, ymin, xmax, ymax
-        for (int yi = 0; yi < HEIGHT; yi++) {                    // compute the bounding box
-          for (int xi = 0; xi < WIDTH; xi++) {
-            if (image_buffer[yi][xi] == 0)
-              continue;
-            // I would like to copy the value from image over to
-            // the buffer. At some good location...
-            int newx = px + xi;
-            int newy = py + yi;
-            int idx = newy * xmax + newx;
-            if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
-              continue;
-            if (image_buffer[yi][xi] == 0)
-              continue;
-            if (newx < boundingBox[0])
-              boundingBox[0] = newx;
-            if (newy < boundingBox[1])
-              boundingBox[1] = newy;
-            if (newx >= boundingBox[2])
-              boundingBox[2] = newx;
-            if (newy >= boundingBox[3])
-              boundingBox[3] = newy;
+        if (bitsAllocated == 16) {
+          signed short *bvals = (signed short *)buffer;
+          for (int yi = 0; yi < HEIGHT; yi++) {                    // compute the bounding box
+            for (int xi = 0; xi < WIDTH; xi++) {
+              if (image_buffer[yi][xi] == 0)
+                continue;
+              // I would like to copy the value from image over to
+              // the buffer. At some good location...
+              int newx = px + xi;
+              int newy = py + yi;
+              int idx = newy * xmax + newx;
+              if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+                continue;
+              if (image_buffer[yi][xi] == 0)
+                continue;
+              if (newx < boundingBox[0])
+                boundingBox[0] = newx;
+              if (newy < boundingBox[1])
+                boundingBox[1] = newy;
+              if (newx >= boundingBox[2])
+                boundingBox[2] = newx;
+              if (newy >= boundingBox[3])
+                boundingBox[3] = newy;
+            }
+          }
+        } else if (bitsAllocated == 8) {
+          unsigned char *bvals = (unsigned char *)buffer;
+          for (int yi = 0; yi < HEIGHT; yi++) {                    // compute the bounding box
+            for (int xi = 0; xi < WIDTH; xi++) {
+              if (image_buffer[yi][xi] == 0)
+                continue;
+              // I would like to copy the value from image over to
+              // the buffer. At some good location...
+              int newx = px + xi;
+              int newy = py + yi;
+              int idx = newy * xmax + newx;
+              if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+                continue;
+              if (image_buffer[yi][xi] == 0)
+                continue;
+              if (newx < boundingBox[0])
+                boundingBox[0] = newx;
+              if (newy < boundingBox[1])
+                boundingBox[1] = newy;
+              if (newx >= boundingBox[2])
+                boundingBox[2] = newx;
+              if (newy >= boundingBox[3])
+                boundingBox[3] = newy;
+            }
           }
         }
 
@@ -982,55 +1047,113 @@ int main(int argc, char **argv) {
               (int)std::round(boundingBox[3] + (color_background_size[2] + rny2 * (color_background_size[3] - color_background_size[2])))};
           // fprintf(stdout, "%d %d %d %d -> %d %d %d %d\n", boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3], backgroundBoundingBox[0],
           //        backgroundBoundingBox[1], backgroundBoundingBox[2], backgroundBoundingBox[3]);
-          for (int yi = 0; yi < ymax; yi++) {
-            for (int xi = 0; xi < xmax; xi++) {
-              if (xi < backgroundBoundingBox[0] || xi > backgroundBoundingBox[2] || yi < backgroundBoundingBox[1] || yi > backgroundBoundingBox[3])
-                continue;
-              int newx = xi;
-              int newy = yi;
-              int idx = newy * xmax + newx;
-              if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
-                continue;
-              // for the background color 255 means white (so max value), 0 mean black so min value
-              bvals[idx] = (signed short)std::max(
-                  0.0f, std::min(current_image_max_value, current_image_min_value + ((1.0f * color_background_color[0]) / (1.0f * 255) *
-                                                                                     (current_image_max_value - current_image_min_value))));
+          if (bitsAllocated == 16) {
+            signed short *bvals = (signed short *)buffer;
+            for (int yi = 0; yi < ymax; yi++) {
+              for (int xi = 0; xi < xmax; xi++) {
+                if (xi < backgroundBoundingBox[0] || xi > backgroundBoundingBox[2] || yi < backgroundBoundingBox[1] || yi > backgroundBoundingBox[3])
+                  continue;
+                int newx = xi;
+                int newy = yi;
+                int idx = newy * xmax + newx;
+                if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+                  continue;
+                // for the background color 255 means white (so max value), 0 mean black so min value
+                bvals[idx] = (signed short)std::max(
+                    0.0f, std::min(current_image_max_value, current_image_min_value + ((1.0f * color_background_color[0]) / (1.0f * 255) *
+                                                                                      (current_image_max_value - current_image_min_value))));
+              }
             }
+          } else if (bitsAllocated == 8) {
+            unsigned char *bvals = (unsigned char *)buffer;
+            for (int yi = 0; yi < ymax; yi++) {
+              for (int xi = 0; xi < xmax; xi++) {
+                if (xi < backgroundBoundingBox[0] || xi > backgroundBoundingBox[2] || yi < backgroundBoundingBox[1] || yi > backgroundBoundingBox[3])
+                  continue;
+                int newx = xi;
+                int newy = yi;
+                int idx = newy * xmax + newx;
+                if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+                  continue;
+                // for the background color 255 means white (so max value), 0 mean black so min value
+                bvals[idx] = (signed short)std::max(
+                    0.0f, std::min(current_image_max_value, current_image_min_value + ((1.0f * color_background_color[0]) / (1.0f * 255) *
+                                                                                      (current_image_max_value - current_image_min_value))));
+              }
+            }            
           }
         }
 
         // draw the text
-        for (int yi = 0; yi < HEIGHT; yi++) {
-          for (int xi = 0; xi < WIDTH; xi++) {
-            if (image_buffer[yi][xi] == 0)
-              continue;
-            // I would like to copy the value from image over to
-            // the buffer. At some good location...
-            int newx = px + xi;
-            int newy = py + yi;
-            int idx = newy * xmax + newx;
-            if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
-              continue;
-            if (image_buffer[yi][xi] == 0)
-              continue;
+        if (bitsAllocated == 16) {
+          signed short *bvals = (signed short *)buffer;
+          for (int yi = 0; yi < HEIGHT; yi++) {
+            for (int xi = 0; xi < WIDTH; xi++) {
+              if (image_buffer[yi][xi] == 0)
+                continue;
+              // I would like to copy the value from image over to
+              // the buffer. At some good location...
+              int newx = px + xi;
+              int newy = py + yi;
+              int idx = newy * xmax + newx;
+              if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+                continue;
+              if (image_buffer[yi][xi] == 0)
+                continue;
 
-            // instead of blending we need to use a fixed overlay color
-            // we have image information between current_image_min_value and current_image_max_value
-            // we need to scale the image_buffer by those values.
-            float f = 0;
-            //float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 512.0 * current_image_max_value));
-            float v = 1.0f * image_buffer[yi][xi] / 255.0; // 0 to 1 for color, could be inverted if we have a white background
-            float w = 1.0f * bvals[idx] / current_image_max_value;
-            float alpha_blend = (v + w * (1.0f - v));
-            if (color_pen_color[0] == 0) { // instead of white on black do now black on white
-              alpha_blend = 1.0f - v;
+              // instead of blending we need to use a fixed overlay color
+              // we have image information between current_image_min_value and current_image_max_value
+              // we need to scale the image_buffer by those values.
+              float f = 0;
+              //float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 512.0 * current_image_max_value));
+              float v = 1.0f * image_buffer[yi][xi] / 255.0; // 0 to 1 for color, could be inverted if we have a white background
+              float w = 1.0f * bvals[idx] / current_image_max_value;
+              float alpha_blend = (v + w * (1.0f - v));
+              if (color_pen_color[0] == 0) { // instead of white on black do now black on white
+                alpha_blend = 1.0f - v;
+              }
+
+              // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+              bvals[idx] = (signed short)std::max(
+                  0.0f, std::min(current_image_max_value, current_image_min_value + (alpha_blend) * (current_image_max_value - current_image_min_value)));
+              // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
             }
-
-            // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
-            bvals[idx] = (signed short)std::max(
-                0.0f, std::min(current_image_max_value, current_image_min_value + (alpha_blend) * (current_image_max_value - current_image_min_value)));
-            // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
           }
+        } else if (bitsAllocated == 8) {
+          unsigned char *bvals = (unsigned char *)buffer;
+          for (int yi = 0; yi < HEIGHT; yi++) {
+            for (int xi = 0; xi < WIDTH; xi++) {
+              if (image_buffer[yi][xi] == 0)
+                continue;
+              // I would like to copy the value from image over to
+              // the buffer. At some good location...
+              int newx = px + xi;
+              int newy = py + yi;
+              int idx = newy * xmax + newx;
+              if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+                continue;
+              if (image_buffer[yi][xi] == 0)
+                continue;
+
+              // instead of blending we need to use a fixed overlay color
+              // we have image information between current_image_min_value and current_image_max_value
+              // we need to scale the image_buffer by those values.
+              float f = 0;
+              //float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 512.0 * current_image_max_value));
+              float v = 1.0f * image_buffer[yi][xi] / 255.0; // 0 to 1 for color, could be inverted if we have a white background
+              float w = 1.0f * bvals[idx] / current_image_max_value;
+              float alpha_blend = (v + w * (1.0f - v));
+              if (color_pen_color[0] == 0) { // instead of white on black do now black on white
+                alpha_blend = 1.0f - v;
+              }
+
+              // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+              bvals[idx] = (signed short)std::max(
+                  0.0f, std::min(current_image_max_value, current_image_min_value + (alpha_blend) * (current_image_max_value - current_image_min_value)));
+              // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+            }
+          }
+
         }
         // we have a bounding box now for the text on this picture
         if (boundingBox[0] == INT_MAX) {
@@ -1118,20 +1241,32 @@ int main(int argc, char **argv) {
       rgb16_pixel_t rgb(65535, 0, 0);
       // we should copy the values over now --- from the buffer? Or from the DICOM Image
       //fill_pixels(view(img), red);
-      signed short *bvals = (signed short *)buffer;
       // stretch the intensities from 0 to max for png (0...65535)
       float pmin = current_image_min_value;
       float pmax = current_image_max_value; 
       auto v = view(img);
       auto it = v.begin();
-      while (it != v.end()) {
-        //++hist[*it];
-        float pixel_val = ((1.0*bvals[0])-pmin) / (pmax - pmin);
-        *it = rgb16_pixel_t{(short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535)};
-        bvals++;
-        it++;
+      if (bitsAllocated == 16) {
+        signed short *bvals = (signed short *)buffer;
+        while (it != v.end()) {
+          //++hist[*it];
+          float pixel_val = ((1.0*bvals[0])-pmin) / (pmax - pmin);
+          *it = rgb16_pixel_t{(short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535), (short unsigned int)(pixel_val*65535)};
+          bvals++;
+          it++;
+        }
+        write_view(outputfilename, const_view(img), png_tag{});
+      } else if (bitsAllocated == 8) {
+        unsigned char *bvals = (unsigned char *)buffer;
+        while (it != v.end()) {
+          //++hist[*it];
+          float pixel_val = ((1.0*bvals[0])-pmin) / (pmax - pmin);
+          *it = rgb8_pixel_t{(unsigned char)(pixel_val*255), (unsigned char)(pixel_val*255), (unsigned char)(pixel_val*255)};
+          bvals++;
+          it++;
+        }
+        write_view(outputfilename, const_view(img), png_tag{});
       }
-      write_view(outputfilename, const_view(img), png_tag{});
     }
     delete[] buffer;
   }

@@ -259,5 +259,5 @@ Some control over the text and placement on the DICOM images is part of the forw
 
 Tip: Convert the bounding box json file to a csv by:
 ```
-jq -r '[.[][]] | (map(keys) | add | unique) as $cols | map(. as $row | $cols | map($row[.])) as $rows | $cols, $rows[] | @csv' boundingBoxes.json
+jq -r '[.[][]] | (map(keys) | add | unique) as $cols | map(. as $row | $cols | map($row[.])) as $rows | $cols, $rows[] | @csv' boundingBoxes.json > boundingBoxes.csv
 ```
