@@ -818,15 +818,17 @@ int main(int argc, char **argv) {
         }
         write_view(outputfilename, const_view(img), png_tag{});
       } else if (bitsAllocated == 8) {
+        rgb8_image_t img8(xmax, ymax);
+        auto v = view(img8);
+        auto it = v.begin();
         unsigned char *bvals = (unsigned char *)buffer;
         while (it != v.end()) {
-          //++hist[*it];
           float pixel_val = ((1.0*bvals[0])-pmin) / (pmax - pmin);
           *it = rgb8_pixel_t{(unsigned char)(pixel_val*255), (unsigned char)(pixel_val*255), (unsigned char)(pixel_val*255)};
           bvals++;
           it++;
         }
-        write_view(outputfilename, const_view(img), png_tag{});
+        write_view(outputfilename, const_view(img8), png_tag{});
       }
     }
     // fprintf(stdout, "  dimensions: %d %d, len: %lu\n", xmax, ymax, len);
