@@ -1193,7 +1193,7 @@ int main(int argc, char **argv) {
         bbox["imagewidth"] = xmax; // of the image
         bbox["imageheight"] = ymax;
         bbox["filename_source"] = std::filesystem::path(files[pickImageIdx]).filename();
-        bbox["filenname"] = std::filesystem::path(outputfilename).filename();
+        bbox["filename"] = std::filesystem::path(outputfilename).filename();
 
         bboxes[bboxes.size()] = bbox;
 
