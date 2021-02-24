@@ -1192,7 +1192,9 @@ int main(int argc, char **argv) {
         bbox["height"] = std::round((boundingBox[3] - boundingBox[1]) / 2);
         bbox["imagewidth"] = xmax; // of the image
         bbox["imageheight"] = ymax;
-        bbox["filename"] = std::filesystem::path(files[pickImageIdx]).filename();
+        bbox["filename_source"] = std::filesystem::path(files[pickImageIdx]).filename();
+        bbox["filenname"] = std::filesystem::path(outputfilename).filename();
+
         bboxes[bboxes.size()] = bbox;
 
         // boundingBoxes.insert(std::pair<std::string, std::map<std::string, std::string>>(
