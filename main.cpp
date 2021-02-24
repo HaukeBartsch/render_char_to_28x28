@@ -1291,7 +1291,7 @@ int main(int argc, char **argv) {
   // safe the boundingBoxes dataset now as well as a json
   //std::u32string res = boundingBoxes.dump(4);
   std::locale::global(std::locale(""));
-  std::ofstream out(output+"/boundingBoxes.json");
+  std::ofstream out(output+"/boundingBoxes.json", std::ofstream::out | std::ofstream::trunc);
 //  std::locale utf8_locale(std::locale(), new utf8cvt<false>);
 //  out.imbue(utf8_locale);
   out << std::setw(4) << boundingBoxes << std::endl;
