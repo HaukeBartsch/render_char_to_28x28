@@ -1192,6 +1192,7 @@ int main(int argc, char **argv) {
         bbox["height"] = std::round((boundingBox[3] - boundingBox[1]) / 2);
         bbox["imagewidth"] = xmax; // of the image
         bbox["imageheight"] = ymax;
+        bbox["class"] = "boundingBox";
         bbox["filename_source"] = std::filesystem::path(files[pickImageIdx]).filename();
         bbox["filename"] = std::filesystem::path(outputfilename).filename();
 
@@ -1201,6 +1202,27 @@ int main(int argc, char **argv) {
         //    (files[pickImageIdx] + bb_count).c_str(), bbox));
       }
     }
+    // In rare cases none of the bounding boxes ever get written. We would still produce an output image,
+    // so we need at least one empty mention of that image in the boundingBoxes file.
+    if (bboxes.size() == 0) {
+      json bbox = json::object();
+      bbox["name"] = std::string("");
+      bbox["xmin"] = NAN;
+      bbox["ymin"] = NAN;
+      bbox["xmax"] = NAN;
+      bbox["ymax"] = NAN;
+      bbox["x"] = NAN;
+      bbox["y"] = NAN;
+      bbox["width"] = 0;
+      bbox["height"] = 0;
+      bbox["imagewidth"] = xmax; // of the image
+      bbox["imageheight"] = ymax;
+      bbox["filename_source"] = std::filesystem::path(files[pickImageIdx]).filename();
+      bbox["filename"] = std::filesystem::path(outputfilename).filename();
+      bbox["class"] = "boundingBox";
+      bboxes[bboxes.size()] = bbox;
+    }
+
     // store all the bounding boxes of the current target image
     boundingBoxes[files[pickImageIdx]] = bboxes;
 
@@ -1292,8 +1314,8 @@ int main(int argc, char **argv) {
   //std::u32string res = boundingBoxes.dump(4);
   std::locale::global(std::locale(""));
   std::ofstream out(output+"/boundingBoxes.json", std::ofstream::out | std::ofstream::trunc);
-//  std::locale utf8_locale(std::locale(), new utf8cvt<false>);
-//  out.imbue(utf8_locale);
+  //  std::locale utf8_locale(std::locale(), new utf8cvt<false>);
+  //  out.imbue(utf8_locale);
   out << std::setw(4) << boundingBoxes << std::endl;
   out.close();
 
