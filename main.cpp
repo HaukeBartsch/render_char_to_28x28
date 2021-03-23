@@ -52,6 +52,8 @@ int main()
 #include "boost/filesystem.hpp"
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+// we can also support the xml output
+#include <boost/property_tree/xml_parser.hpp>
 
 // argument parsing
 #include "json.hpp"
@@ -236,6 +238,102 @@ std::vector<std::u32string> generateRandomText(int len) {
   // std::cout << tmp_s << std::endl;
   // std::cout << unicodeChars << std::endl;
   return tmp_s;
+}
+
+
+void exportBoundingBoxesAsXML(json boundingBoxes, std::string path, std::string folderWithText) {
+  // we convert the json to a property_tree to save as XML
+
+  for (json::iterator it = boundingBoxes.begin(); it != boundingBoxes.end(); ++it) {
+    std::string dcmFileName = it.key();
+    std::string outputfilename;
+    int width = 0;
+    int height = 0;
+    int depth = 3;
+
+    boost::property_tree::ptree pt;
+    boost::property_tree::ptree annotation;
+
+    boost::property_tree::ptree segmented;
+    segmented.put_value(0);
+    annotation.push_back(std::make_pair("segmented", segmented));
+
+    boost::property_tree::ptree folder;
+    folder.put_value(path);
+    annotation.push_back(std::make_pair("folder", folder));
+
+    boost::property_tree::ptree pathNode;
+    pathNode.put_value(folderWithText);
+    annotation.push_back(std::make_pair("path", pathNode));
+
+    boost::property_tree::ptree source;
+    boost::property_tree::ptree database;
+    database.put_value("Unknown");
+    source.push_back(std::make_pair("database", database));
+    annotation.push_back(std::make_pair("source", source));
+
+
+    for (json::iterator it2 = it.value().begin(); it2 != it.value().end(); ++it2) {
+      //std::cout << it.key() << " : " << it2.value() << "\n";
+      //fprintf(stdout, "%s\n", it2.key().c_str());
+      //std::string k = it2.key();
+      //fprintf(stdout, "done with key\n");
+      // now do the keys in each object
+      boost::property_tree::ptree object;
+      boost::property_tree::ptree entry;
+      entry.put_value(std::string("bbox"));
+      object.push_back(std::make_pair("name", entry));
+      entry.put_value(std::string("Unspecified"));
+      object.push_back(std::make_pair("pose", entry));
+      entry.put_value(0);
+      object.push_back(std::make_pair("truncated", entry));
+      object.push_back(std::make_pair("difficult", entry));
+
+      boost::property_tree::ptree box;
+      for (json::iterator it3 = it2.value().begin(); it3 != it2.value().end(); ++it3) {
+        std::string k = it3.key();
+        if (k == "filename") {
+          outputfilename = it3.value(); // should be always the same filename
+        }
+        if (k == "imagewidth") {
+          width = it3.value();
+        }
+        if (k == "imageheight") {
+          height = it3.value();
+        }
+        if (k == "xmin" || k == "xmax" || k == "ymin" || k == "ymax") {
+          int v = it3.value();
+          boost::property_tree::ptree entry;
+          entry.put_value(v);
+          box.push_back(std::make_pair(k, entry));
+        }
+      }
+      object.push_back(std::make_pair("bndbox", box));
+      annotation.push_back(std::make_pair("object", object));
+    }
+    boost::property_tree::ptree fn;
+    fn.put_value(outputfilename);
+    annotation.push_back(std::make_pair("filename", fn));    
+
+    boost::property_tree::ptree sizeNode;
+    boost::property_tree::ptree widthNode;
+    widthNode.put_value(width);
+    boost::property_tree::ptree heightNode;
+    heightNode.put_value(height);
+    boost::property_tree::ptree depthNode;
+    depthNode.put_value(depth);
+    sizeNode.push_back(std::make_pair("width", widthNode));
+    sizeNode.push_back(std::make_pair("height", heightNode));
+    sizeNode.push_back(std::make_pair("depth", depthNode));
+    annotation.push_back(std::make_pair("size", sizeNode));
+
+    pt.push_back(std::make_pair("annotation", annotation));
+
+    const boost::property_tree::xml_writer_settings<std::string> w( ' ', 2 );
+    std::string filename = path + "/" + outputfilename.replace(outputfilename.end()-4, outputfilename.end(), "") + ".xml";
+    fprintf(stdout, "write to file %s\n", filename.c_str());
+    boost::property_tree::write_xml( filename, pt, std::locale(), w );
+  }
 }
 
 int main(int argc, char **argv) {
@@ -1319,6 +1417,16 @@ int main(int argc, char **argv) {
   out << std::setw(4) << boundingBoxes << std::endl;
   out.close();
 
+  // create an annotations folder for the output path
+  // only if we are exporting png we should do this:
+  if (target_type == "png") {
+    dn = output + "/annotations/";
+    if (!(stat(dn.c_str(), &buf) == 0)) {
+      mkdir(dn.c_str(), 0777);
+    }
+
+    exportBoundingBoxesAsXML(boundingBoxes, dn, output + "/with_text/");
+  }
   // test writing png
   //rgb8_image_t img(512, 512);
   //rgb8_pixel_t red(255, 0, 0);
