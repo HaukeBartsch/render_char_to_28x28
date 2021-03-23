@@ -167,21 +167,24 @@ const option::Descriptor usage[] = {
     {0, 0, 0, 0, 0, 0}};
 
 // get a list of all the DICOM files we should use
-std::vector<std::string> listFilesSTD(const std::string &path, bool verbose) {
+std::vector<std::string> listFilesSTD(const std::vector<std::string> &paths, bool verbose) {
   std::vector<std::string> files;
   std::string extension;
 
-  for (boost::filesystem::recursive_directory_iterator end, dir(path); dir != end; ++dir) {
-    // std::cout << *dir << "\n";  // full path
-    if (is_regular_file(dir->path())) {
-      // reading zip and tar files might take a lot of time.. filter out here
-      extension = boost::filesystem::extension(dir->path());
-      if (extension == ".tar" || extension == ".gz" || extension == ".zip" || extension == ".tgz" ||
-          extension == ".bz2")
-        continue;
-      files.push_back(dir->path().c_str());
-      if ((files.size() % 2000) == 0 && verbose) {
-        fprintf(stdout, "[listing file names %'5lu...]\r", files.size()); fflush(stdout);
+  for (int i = 0; i < paths.size(); i++) {
+    std::string path = paths[i];
+    for (boost::filesystem::recursive_directory_iterator end, dir(path); dir != end; ++dir) {
+      // std::cout << *dir << "\n";  // full path
+      if (is_regular_file(dir->path())) {
+        // reading zip and tar files might take a lot of time.. filter out here
+        extension = boost::filesystem::extension(dir->path());
+        if (extension == ".tar" || extension == ".gz" || extension == ".zip" || extension == ".tgz" ||
+            extension == ".bz2")
+          continue;
+        files.push_back(dir->path().c_str());
+        if ((files.size() % 2000) == 0 && verbose) {
+          fprintf(stdout, "[listing file names %'5lu...]\r", files.size()); fflush(stdout);
+        }
       }
     }
   }
@@ -343,7 +346,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  std::string dicom_path = "";
+  std::vector<std::string> dicom_paths;
   std::string configfile_path = "";
   std::string output = "";    // directory path
   std::string font_path = ""; // "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
@@ -370,7 +373,7 @@ int main(int argc, char **argv) {
     case DICOMS:
       if (opt.arg) {
         // fprintf(stdout, "--input '%s'\n", opt.arg);
-        dicom_path = opt.arg;
+        dicom_paths.push_back(opt.arg);
       } else {
         fprintf(stdout, "--dicoms needs a directory specified\n");
         exit(-1);
@@ -674,7 +677,7 @@ int main(int argc, char **argv) {
 
   // we should find all DICOM files
   fprintf(stdout, "\n");
-  std::vector<std::string> files = listFilesSTD(dicom_path, true);
+  std::vector<std::string> files = listFilesSTD(dicom_paths, true);
   fprintf(stdout, "\n");
   // fprintf(stdout, "found %'ld files\n", files.size());
 
@@ -830,6 +833,11 @@ int main(int argc, char **argv) {
     char *buffer = new char[len];
 
     change_image.GetBuffer(buffer);
+
+    //
+    // Up to here everything is about DICOM but at the end we have buffer.
+    // We should be able to do the same for png (16bit using libpng).
+    //
 
     // what is max and min here? (don't change by the overlay)
     float current_image_min_value, current_image_max_value;
@@ -1318,6 +1326,9 @@ int main(int argc, char **argv) {
         bbox["filename_source"] = std::filesystem::path(files[pickImageIdx]).filename();
         bbox["filename"] = std::filesystem::path(outputfilename).filename();
 
+        // we can also get bounding boxes that don't have an area (height or width == 0 due to rounding)
+        if (bbox["width"] < 1 || bbox["height"] < 1) // in pixel correct?
+          continue;
         bboxes[bboxes.size()] = bbox;
 
         // boundingBoxes.insert(std::pair<std::string, std::map<std::string, std::string>>(
