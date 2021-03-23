@@ -1,26 +1,7 @@
-
 /*
  ./renderText -d data -o /tmp/ -c forwardModel.json \
                 -t 1
 */
-
-/*
-
-#define png_infopp_NULL (png_infopp)NULL
-#define int_p_NULL (int*)NULL
-#include <boost/gil/gil_all.hpp>
-#include <boost/gil/extension/io/png_dynamic_io.hpp>
-using namespace boost::gil;
-int main()
-{
-    rgb8_image_t img(512, 512);
-    rgb8_pixel_t red(255, 0, 0);
-    fill_pixels(view(img), red);
-    png_write_view("redsquare.png", const_view(img));
-}
-
-*/
-
 
 #include <math.h>
 #include <stdio.h>
@@ -156,7 +137,7 @@ struct Arg : public option::Arg {
   }
 };
 
-enum optionIndex { UNKNOWN, FONTFILE, OUTPUT, DICOMS, CONFIG, HELP, TARGETNUM, EXPORTTYPE, RANDOMSEED };
+enum optionIndex { UNKNOWN, FONTFILE, OUTPUT, DICOMS, CONFIG, HELP, TARGETNUM, EXPORTTYPE, RANDOMSEED, VERBOSE, BATCH };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
      "Create deep learning data from collection of DICOM files by adding text annotations.\n"
@@ -175,14 +156,18 @@ const option::Descriptor usage[] = {
      "  --export_type, -e \tFile format for output (\"dcm\" by default, or \"png\")."},
     {RANDOMSEED, 0, "s", "random_seed", Arg::Required,
      "  --random_seed, -s \tSpecify random seed for text placement (default random)."},
+    {BATCH, 0, "b", "batch", Arg::Required,
+     "  --batch, -b \tA string prepended to the numbered files to allow for repeated creation of samples without overwrite."},
+    {VERBOSE, 0, "v", "verbose", Arg::None,
+     "  --verbose, -v \tVerbose output."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
-     "  ./renderText -d data/LIDC-IDRI-0009 -c forwardModel.json -o /tmp/bla -t 100\n"
+     "  ./renderText -d data/LIDC-IDRI-0009 -c forwardModel.json -o /tmp/bla -e png -t 100 -v\n"
      "  ./renderText --help\n"},
     {0, 0, 0, 0, 0, 0}};
 
 // get a list of all the DICOM files we should use
-std::vector<std::string> listFilesSTD(const std::string &path) {
+std::vector<std::string> listFilesSTD(const std::string &path, bool verbose) {
   std::vector<std::string> files;
   std::string extension;
 
@@ -195,12 +180,13 @@ std::vector<std::string> listFilesSTD(const std::string &path) {
           extension == ".bz2")
         continue;
       files.push_back(dir->path().c_str());
-      if ((files.size() % 200) == 0) {
-        fprintf(stdout, "[reading files %05lu]\r", files.size());
+      if ((files.size() % 2000) == 0 && verbose) {
+        fprintf(stdout, "[listing file names %'5lu...]\r", files.size()); fflush(stdout);
       }
     }
   }
-  fprintf(stdout, "[reading files %'5lu done]\r", files.size());
+  if (verbose)
+    fprintf(stdout, "[Listing file names done. %'5lu files found.]\r", files.size());
 
   return files;
 }
@@ -331,7 +317,7 @@ void exportBoundingBoxesAsXML(json boundingBoxes, std::string path, std::string 
 
     const boost::property_tree::xml_writer_settings<std::string> w( ' ', 2 );
     std::string filename = path + "/" + outputfilename.replace(outputfilename.end()-4, outputfilename.end(), "") + ".xml";
-    fprintf(stdout, "write to file %s\n", filename.c_str());
+    //  fprintf(stdout, "write to file %s\n", filename.c_str());
     boost::property_tree::write_xml( filename, pt, std::locale(), w );
   }
 }
@@ -363,8 +349,10 @@ int main(int argc, char **argv) {
   std::string font_path = ""; // "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
   unsigned int random_seed = (unsigned)time(NULL) * getpid();
   std::string target_type = "dcm";
+  std::string batch_string = "";
 
   int target = 1;
+  bool verbose = false;
 
   for (option::Option *opt = options[UNKNOWN]; opt; opt = opt->next())
     std::cout << "Unknown option: " << std::string(opt->name, opt->namelen) << "\n";
@@ -375,6 +363,10 @@ int main(int argc, char **argv) {
     switch (opt.index()) {
     case HELP:
       // not possible, because handled further above and exits the program
+      break;
+    case VERBOSE:
+      verbose = true;
+      break;
     case DICOMS:
       if (opt.arg) {
         // fprintf(stdout, "--input '%s'\n", opt.arg);
@@ -390,6 +382,15 @@ int main(int argc, char **argv) {
         output = opt.arg;
       } else {
         fprintf(stdout, "--output needs a directory specified\n");
+        exit(-1);
+      }
+      break;
+    case BATCH:
+      if (opt.arg) {
+        // fprintf(stdout, "--output '%s'\n", opt.arg);
+        batch_string = opt.arg;
+      } else {
+        fprintf(stdout, "--batch needs a string specified\n");
         exit(-1);
       }
       break;
@@ -435,8 +436,6 @@ int main(int argc, char **argv) {
         target_type = opt.arg;
         if (target_type != "png") {
           target_type = "dcm";
-        } else {
-          fprintf(stdout, "Detected output type of png\n");
         }
       } else {
         fprintf(stdout, "--target_type needs dcm or png\n");
@@ -462,16 +461,19 @@ int main(int argc, char **argv) {
     configFileExists = false;
   } else {
     configFileExists = true;
-    fprintf(stdout, "  Found config file in: %s\n", configfile_path.c_str());
+    if (verbose)
+      fprintf(stdout, "  Found config file in: %s\n", configfile_path.c_str());
   }
   std::vector<std::string> font_paths;
   std::vector<std::vector<int>> font_sizes;   // pick a random size from these
   std::vector<std::vector<int>> face_indexes; // if the font has more than one face index
   if (configFileExists) {
     pt::read_json(configfile_path.c_str(), root);
-    fprintf(stdout, "Found model in config file \"%s\"\n\n",
-            root.get_child("model").get_value<std::string>().c_str());
-    fprintf(stdout, "%s\n", root.get_child("description").get_value<std::string>().c_str());
+    if (verbose) {
+      fprintf(stdout, "Found model in config file \"%s\"\n\n",
+              root.get_child("model").get_value<std::string>().c_str());
+      fprintf(stdout, "%s\n", root.get_child("description").get_value<std::string>().c_str());
+    }
     //
     // Check for a random font
     //
@@ -512,7 +514,8 @@ int main(int argc, char **argv) {
         font_size = font_sizes[idx][idx2];
         int idx3 = std::rand() % face_indexes[idx].size();
         face_index = face_indexes[idx][idx3];
-        fprintf(stdout,
+        if (verbose)
+          fprintf(stdout,
                 "Selected a font [%d] from the config file (%lu font%s found). Size is %d. Face "
                 "index is: %d.\n",
                 idx, font_paths.size(), font_paths.size() > 1 ? "s" : "", font_size, face_index);
@@ -542,7 +545,8 @@ int main(int argc, char **argv) {
     boost::property_tree::ptree d = root.get_child("logic").get_child("placement");
     for (const std::pair<std::string, boost::property_tree::ptree> &p : d) {
       std::map<std::string, std::vector<float>> entry;
-      fprintf(stdout, "  Placement: %s\n", p.first.c_str());
+      if (verbose)
+        fprintf(stdout, "  Placement: %s\n", p.first.c_str());
       auto bounds = p.second.get_child("x").equal_range("");
       std::vector<float> values;
       for (auto iter = bounds.first; iter != bounds.second; ++iter) {
@@ -591,7 +595,8 @@ int main(int argc, char **argv) {
       placements.push_back(entry);
     }
   }
-  fprintf(stdout, "  Found %ld placements\n", placements.size());
+  if (verbose)
+    fprintf(stdout, "  Found %ld placements\n", placements.size());
 
   //
   // Read in the image contrasts
@@ -618,14 +623,16 @@ int main(int argc, char **argv) {
       image_contrasts.push_back(this_contrast);
     }
   }
-  fprintf(stdout, "Found %ld contrast range%s to choose from.\n", image_contrasts.size(), image_contrasts.size()>1?"s":"");
+  if (verbose)
+    fprintf(stdout, "Found %ld contrast range%s to choose from.\n", image_contrasts.size(), image_contrasts.size()>1?"s":"");
   float image_contrastx; // a single choice, value between  the two specified, something like 0.1
   float image_contrasty; // a single choice
   {
     int idx = std::rand() % image_contrasts.size();
     image_contrastx = image_contrasts[idx][0] + (( (1.0f * std::rand()) / (1.0f * RAND_MAX) ) * (image_contrasts[idx][1] - image_contrasts[idx][0]));
     image_contrasty = image_contrasts[idx][2] + (( (1.0f * std::rand()) / (1.0f * RAND_MAX) ) * (image_contrasts[idx][3] - image_contrasts[idx][2]));
-    fprintf(stdout, "Selected image contrast of %f %f\n", image_contrastx, image_contrasty);
+    if (verbose)
+      fprintf(stdout, "Selected image contrast of %f %f\n", image_contrastx, image_contrasty);
   }
 
   //
@@ -659,14 +666,15 @@ int main(int argc, char **argv) {
       colors.push_back(this_background_size);
     }
   }
-  fprintf(stdout, "Found %ld color setting%s to choose from.\n", colors.size(), colors.size() > 1 ? "s" : "");
+  if (verbose)
+    fprintf(stdout, "Found %ld color setting%s to choose from.\n", colors.size(), colors.size() > 1 ? "s" : "");
   std::vector<float> color_background_size;  // a single choice, value between  the two specified, something like 0.1
   std::vector<float> color_background_color; // a single choice
   std::vector<float> color_pen_color;
 
   // we should find all DICOM files
   fprintf(stdout, "\n");
-  std::vector<std::string> files = listFilesSTD(dicom_path);
+  std::vector<std::string> files = listFilesSTD(dicom_path, true);
   fprintf(stdout, "\n");
   // fprintf(stdout, "found %'ld files\n", files.size());
 
@@ -689,9 +697,9 @@ int main(int argc, char **argv) {
   // const char *filename = font_path.c_str(); /* first argument     */
   // std::map<std::string, std::vector<bbox_t>> boundingBoxes;
   json boundingBoxes = json::object();
-
+  int bboxCounter = 0;
   for (int i = 0; i < target; i++) { // how many images
-
+    fprintf(stdout, "[ create file %d/%d ]\r", i+1, target);fflush(stdout);
     json bboxes = json::array(); // all the bounding boxes for the current image
     //
     // for every new DICOM image we randomize some things
@@ -702,7 +710,8 @@ int main(int argc, char **argv) {
     font_size = font_sizes[idx][idx2];
     int idx3 = std::rand() % face_indexes[idx].size();
     face_index = face_indexes[idx][idx3];
-    fprintf(stdout,
+    if (verbose)
+      fprintf(stdout,
             "Selected a font [%d] from the config file (%lu font%s found). Size is %d. Face "
             "index is: %d.\n",
             idx, font_paths.size(), font_paths.size() > 1 ? "s" : "", font_size, face_index);
@@ -732,13 +741,15 @@ int main(int argc, char **argv) {
       r.SetFileName(files[pickImageIdx].c_str());
       if (r.CanRead() != true) {
         maxIter--;
-        fprintf(stdout, "read failed [%d] for \"%s\"... try next\n", maxIter,
+        if (verbose)
+          fprintf(stdout, "read failed [%d] for \"%s\"... try next\n", maxIter,
                 files[pickImageIdx].c_str());
         continue; // try again
       }
 
       reader.SetFileName(files[pickImageIdx].c_str());
-      fprintf(stdout, "Try to read \"%s\"\n", files[pickImageIdx].c_str());
+      if (verbose)
+        fprintf(stdout, "Try to read \"%s\"\n", files[pickImageIdx].c_str());
       if (!reader.Read()) {
         maxIter--;
         fprintf(stdout, "read failed... try next\n");
@@ -751,7 +762,8 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Error: I tried to find a DICOM image I could read. I could not... ");
       exit(-1);
     } else {
-      fprintf(stdout, "  DICOM file: \"%s\"\n", files[pickImageIdx].c_str());
+      if (verbose)
+        fprintf(stdout, "  DICOM file: \"%s\"\n", files[pickImageIdx].c_str());
       // bbox.insert(std::pair<std::string, std::string>("filename", files[pickImageIdx].c_str()));
     }
     const gdcm::Image &iimage = reader.GetImage();
@@ -804,15 +816,20 @@ int main(int argc, char **argv) {
     gdcm::PixelFormat pf = change_image.GetPixelFormat();
     // pf could be gdcm::PixelFormat::INT8, or INT16, etc...
     // We need to change our cast further down on the pixel data.
-
-    unsigned short pixelsize = pf.GetPixelSize();
-    fprintf(stdout, "  pixelsize of input is: %d\n", pixelsize);
+    unsigned short pixelsize;
+    int bitsAllocated = pf.GetBitsAllocated(); // could be 8 or 16
+    if ((bitsAllocated % 8) != 0) {
+      fprintf(stderr, "Warning: BitsAllocated is not a multiple of 8, could be a segmentation object, skip file \"%s\".\n", files[pickImageIdx].c_str());
+      continue;
+    }
+    pixelsize = pf.GetPixelSize();
+    if (verbose)
+      fprintf(stdout, "  pixelsize of input is: %d\n", pixelsize);
     unsigned long len = change_image.GetBufferLength();
     // fprintf(stdout, "Found buffer of length: %ld\n", len);
     char *buffer = new char[len];
 
     change_image.GetBuffer(buffer);
-    int bitsAllocated = change_image.GetPixelFormat().GetBitsAllocated(); // could be 8 or 16
 
     // what is max and min here? (don't change by the overlay)
     float current_image_min_value, current_image_max_value;
@@ -834,7 +851,7 @@ int main(int argc, char **argv) {
           if (current_image_max_value < bvals[p]) current_image_max_value = bvals[p];  
         }
       } else {
-        fprintf(stdout, "Error: this bits allocated value is not supported %d.\n", bitsAllocated);
+        fprintf(stderr, "Error: this bits allocated value is not supported %d.\n", bitsAllocated);
         continue;
       }
     }
@@ -889,13 +906,13 @@ int main(int argc, char **argv) {
       gdcm::ImageWriter writer2;
       writer2.SetImage(change.GetOutput());
       writer2.SetFile(reader.GetFile());
-      snprintf(outputfilename, 1024 - 1, "%s/without_text/%08d.dcm", output.c_str(), i);
+      snprintf(outputfilename, 1024 - 1, "%s/without_text/%s%08d.dcm", output.c_str(), batch_string.c_str(), i);
       writer2.SetFileName(outputfilename);
       if (!writer2.Write()) {
         return 1;
       }
     } else {
-      snprintf(outputfilename, 1024 - 1, "%s/without_text/%08d.png", output.c_str(), i);
+      snprintf(outputfilename, 1024 - 1, "%s/without_text/%s%08d.png", output.c_str(), batch_string.c_str(), i);
       rgb16_image_t img(xmax, ymax);
       rgb16_pixel_t rgb(65535, 0, 0);
       // we should copy the values over now --- from the buffer? Or from the DICOM Image
@@ -935,7 +952,8 @@ int main(int argc, char **argv) {
     for (int placement = 0; placement < placements.size(); placement++) {
       { // color setting by placement
         int idx = std::rand() % colors.size();
-        fprintf(stdout, "  Select color set %d, opacity of background: %f\n", idx, colors[idx][7]);
+        if (verbose)
+          fprintf(stdout, "  Select color set %d, opacity of background: %f\n", idx, colors[idx][7]);
         // size here is how much bigger the background is supposed to be compared to the bounding box of the text.
         // we draw the image, draw the background and draw the text (in that order)
         color_background_size = {colors[idx][0], colors[idx][1], colors[idx][2], colors[idx][3]};
@@ -943,8 +961,8 @@ int main(int argc, char **argv) {
         color_background_color = {colors[idx][4], colors[idx][5], colors[idx][6], colors[idx][7]};
         color_pen_color = {colors[idx][8], colors[idx][9], colors[idx][10], colors[idx][11]};
       }
-
-      fprintf(stdout, "  Use placement: %d\n", placement);
+      if (verbose)
+        fprintf(stdout, "  Use placement: %d\n", placement);
       float vx_min = placements[placement]["x"][0];
       float vx_max = placements[placement]["x"][1];
       float vx = vx_min + ((rand() * 1.0f) / (1.0f * RAND_MAX)) * (vx_max - vx_min);
@@ -1028,7 +1046,7 @@ int main(int argc, char **argv) {
         error = FT_Set_Char_Size(face, font_size_in_pixel * 64, 0, 96, 0); /* set character size */
         /* error handling omitted */
         if (error != 0) {
-          fprintf(stdout, "Error: FT_Set_Char_Size returned error.\n");
+          fprintf(stderr, "Error: FT_Set_Char_Size returned error.\n");
           exit(-1);
         }
 
@@ -1135,6 +1153,8 @@ int main(int argc, char **argv) {
                 boundingBox[3] = newy;
             }
           }
+        } else {
+          fprintf(stderr, "Warning: Found bitsAllocation that we don't support %d\n", bitsAllocated);
         }
 
         // draw the background
@@ -1189,6 +1209,8 @@ int main(int argc, char **argv) {
                                                                                       (current_image_max_value - current_image_min_value))));
               }
             }            
+          } else {
+            fprintf(stderr, "Warning: bitAllocation unsupported %d.\n", bitsAllocated);
           }
         }
 
@@ -1265,9 +1287,11 @@ int main(int argc, char **argv) {
         }
         // we have a bounding box now for the text on this picture
         if (boundingBox[0] == INT_MAX) {
+          //makefprintf(stderr, "Warning: No bounding box found [%d].\n", i);
           continue;
         }
-        fprintf(stdout, "  bounding box: %d %d %d %d\n", boundingBox[0], boundingBox[1],
+        if (verbose)
+          fprintf(stdout, "  bounding box: %d %d %d %d\n", boundingBox[0], boundingBox[1],
                 boundingBox[2], boundingBox[3]);
         // bbox.insert(files[pickImageIdx].c_str()
         json bbox = json::object();
@@ -1303,6 +1327,7 @@ int main(int argc, char **argv) {
     // In rare cases none of the bounding boxes ever get written. We would still produce an output image,
     // so we need at least one empty mention of that image in the boundingBoxes file.
     if (bboxes.size() == 0) {
+      fprintf(stderr, "Warning: empty bounding box array for image %d.\n", i);
       json bbox = json::object();
       bbox["name"] = std::string("");
       bbox["xmin"] = NAN;
@@ -1322,7 +1347,21 @@ int main(int argc, char **argv) {
     }
 
     // store all the bounding boxes of the current target image
-    boundingBoxes[files[pickImageIdx]] = bboxes;
+    // we could pick the same file here twice, that would overwrite the
+    // older value and we end up with missing bounding boxes
+    if (boundingBoxes.contains(files[pickImageIdx])) {
+      int cc = 1;
+      std::string unique_name;
+      do {
+        unique_name = files[pickImageIdx] + "_" + std::to_string(cc);
+        cc++;
+      } while (boundingBoxes.contains(unique_name));
+
+      boundingBoxes[unique_name] = bboxes;
+    } else {
+      boundingBoxes[files[pickImageIdx]] = bboxes;
+    }
+    bboxCounter++;
 
     // now we can add the bitmap to the original data and write again
     // change_image.SetBuffer(buffer);
@@ -1358,7 +1397,7 @@ int main(int argc, char **argv) {
 
 
     if (target_type == "dcm") {
-      snprintf(outputfilename, 1024 - 1, "%s/with_text/%08d.dcm", output.c_str(), i);
+      snprintf(outputfilename, 1024 - 1, "%s/with_text/%s%08d.dcm", output.c_str(), batch_string.c_str(), i);
       gdcm::ImageWriter writer;
       writer.SetImage(*im);
       writer.SetFile(reader.GetFile());
@@ -1368,7 +1407,7 @@ int main(int argc, char **argv) {
         return 1;
       }
     } else {
-      snprintf(outputfilename, 1024 - 1, "%s/with_text/%08d.png", output.c_str(), i);
+      snprintf(outputfilename, 1024 - 1, "%s/with_text/%s%08d.png", output.c_str(), batch_string.c_str(), i);
       rgb16_image_t img(xmax, ymax);
       rgb16_pixel_t rgb(65535, 0, 0);
       // we should copy the values over now --- from the buffer? Or from the DICOM Image
@@ -1424,7 +1463,6 @@ int main(int argc, char **argv) {
     if (!(stat(dn.c_str(), &buf) == 0)) {
       mkdir(dn.c_str(), 0777);
     }
-
     exportBoundingBoxesAsXML(boundingBoxes, dn, output + "/with_text/");
   }
   // test writing png
@@ -1432,7 +1470,6 @@ int main(int argc, char **argv) {
   //rgb8_pixel_t red(255, 0, 0);
   //fill_pixels(view(img), red);
   //write_view("redsquare.png", const_view(img), png_tag{});
-
 
   return 0;
 }
