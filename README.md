@@ -242,16 +242,19 @@ Options:
   --help            Print this help message.
   --dicom, -d       Directory with DICOM files.
   --output, -o      Output directory.
-  --fontfile, -f    Name of the font to be used - needs to be available locally.
-  --targetnum, -t   Number of images to be created. Images are chosen at random
-                    from DICOM input folder.
-  --config, -c      Config file to specify text generation, font sizes etc..
-  --export_type, -e File format for output (dcm by default, or png).
-  --random_seed, -s Specify random seed for text placement. If not used a time
-                    based seed is used instead.
+  --fontfile, -f    Name of the font to be used. Also specific in the config
+                    file.
+  --targetnum, -t   Number of image pairs to be created. Images are chosen at
+                    random from the DICOM folder.
+  --config, -c      Configuration file for text generation.
+  --export_type, -e File format for output ("dcm" by default, or "png").
+  --random_seed, -s Specify random seed for text placement (default random).
+  --batch, -b       A string prepended to the numbered files to allow for
+                    repeated creation of samples without overwrite.
+  --verbose, -v     Verbose output.
 
 Examples:
-  ./renderText -d data/LIDC-IDRI-0009 -c forwardModel.json -o /tmp/bla -t 100
+  ./renderText -d data/LIDC-IDRI-0009 -c forwardModel.json -o /tmp/bla -e png -t 100 -v
   ./renderText --help
 ```
 
@@ -261,3 +264,7 @@ Tip: Convert the bounding box json file to a csv by:
 ```
 jq -r '[.[][]] | (map(keys) | add | unique) as $cols | map(. as $row | $cols | map($row[.])) as $rows | $cols, $rows[] | @csv' boundingBoxes.json > boundingBoxes.csv
 ```
+
+## Output format
+
+In case that the png format is selected as the output format the program will assume that the user also wants the bounding box information in a separate folder annotations/ in the PASCAL VOC XML format. This format consists of a separate xml file for each image file with the information on the annotations placed on the image.
