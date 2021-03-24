@@ -251,6 +251,8 @@ Options:
   --random_seed, -s Specify random seed for text placement (default random).
   --batch, -b       A string prepended to the numbered files to allow for
                     repeated creation of samples without overwrite.
+  --multiclass, -m  Create a background and a text class at a rate of 50% 
+                    (default is only a bbox class is created).
   --verbose, -v     Verbose output.
 
 Examples:
