@@ -17,11 +17,13 @@ FIND_LIBRARY(LIBXML2_LIBRARY NAMES xml2)
 FIND_LIBRARY(JPEG_LIBRARY NAMES jpeg)
 FIND_LIBRARY(ZLIB_LIBRARY NAMES z)
 FIND_LIBRARY(XLST_LIBRARY NAMES exslt)
+FIND_LIBRARY(PNG_LIBRARY NAMES png16)
 
 message(STATUS LIBXML2_LIBRARY = ${LIBXML2_LIBRARY})
 message(STATUS JPEG_LIBRARY = ${JPEG_LIBRARY})
 message(STATUS ZLIB_LIBRARY = ${ZLIB_LIBRARY})
 message(STATUS XLST_LIBRARY = ${XLST_LIBRARY})
+message(STATUS PNG_LIBRARY = ${PNG_LIBRARY})
 
 # GDCM
 set (GDCM_USE_VTK OFF)
@@ -48,5 +50,8 @@ find_package(Freetype REQUIRED)
 
 add_executable (renderText main.cpp ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories (renderText PUBLIC ${GDCM_BINARY_DIR}/Source/Common ${GDCM_SOURCE_DIR}/Source/Common ${GDCM_SOURCE_DIR}/Source/MediaStorageAndFileFormat ${LIBXML2_INCLUDE_DIR} ${FREETYPE_INCLUDE_DIRS})
+target_link_libraries(renderText gdcmCommon gdcmMEXD gdcmMEXD gdcmMSFF gdcmDICT gdcmDSED ${LIBXML2_LIBRARY} ${JPEG_LIBRARY} ${ZLIB_LIBRARY} ${XLST_LIBRARY} ${Boost_LIBRARIES} ${FREETYPE_LIBRARIES} ${PNG_LIBRARY} pthread)
 
-target_link_libraries(renderText gdcmCommon gdcmMEXD gdcmMEXD gdcmMSFF gdcmDICT gdcmDSED ${LIBXML2_LIBRARY} ${JPEG_LIBRARY} ${ZLIB_LIBRARY} ${XLST_LIBRARY} ${Boost_LIBRARIES} ${FREETYPE_LIBRARIES} pthread png)
+add_executable (png162dcm png162dcm.cpp ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories (png162dcm PUBLIC ${GDCM_BINARY_DIR}/Source/Common ${GDCM_SOURCE_DIR}/Source/Common ${GDCM_SOURCE_DIR}/Source/MediaStorageAndFileFormat ${LIBXML2_INCLUDE_DIR} /usr/include)
+target_link_libraries(png162dcm gdcmCommon gdcmMEXD gdcmMEXD gdcmMSFF gdcmDICT gdcmDSED ${LIBXML2_LIBRARY} ${JPEG_LIBRARY} ${ZLIB_LIBRARY} ${XLST_LIBRARY} ${Boost_LIBRARIES} ${PNG_LIBRARY} pthread)

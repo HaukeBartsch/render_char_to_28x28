@@ -71,6 +71,9 @@ using json = nlohmann::json;
 /* origin is the upper left corner */
 unsigned char image_buffer[HEIGHT][WIDTH];
 
+/* switch between global mode for one or two class bounding box generation */
+bool twoclass = false;
+
 /* Replace this function with something useful. */
 
 void draw_bitmap(FT_Bitmap *bitmap, FT_Int x, FT_Int y) {
@@ -137,7 +140,7 @@ struct Arg : public option::Arg {
   }
 };
 
-enum optionIndex { UNKNOWN, FONTFILE, OUTPUT, DICOMS, CONFIG, HELP, TARGETNUM, EXPORTTYPE, RANDOMSEED, VERBOSE, BATCH };
+enum optionIndex { UNKNOWN, FONTFILE, OUTPUT, DICOMS, CONFIG, HELP, TARGETNUM, EXPORTTYPE, RANDOMSEED, VERBOSE, BATCH, TWOCLASS };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
      "Create deep learning data from collection of DICOM files by adding text annotations.\n"
@@ -160,6 +163,8 @@ const option::Descriptor usage[] = {
      "  --batch, -b \tA string prepended to the numbered files to allow for repeated creation of samples without overwrite."},
     {VERBOSE, 0, "v", "verbose", Arg::None,
      "  --verbose, -v \tVerbose output."},
+    {TWOCLASS, 0, "m", "multiclass", Arg::None,
+     "  --multiclass, -m \tProvide examples for text and for non-text objects. Default is that only bounding boxes for actual text are generated."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
      "  ./renderText -d data/LIDC-IDRI-0009 -c forwardModel.json -o /tmp/bla -e png -t 100 -v\n"
@@ -239,6 +244,7 @@ void exportBoundingBoxesAsXML(json boundingBoxes, std::string path, std::string 
     int width = 0;
     int height = 0;
     int depth = 3;
+    std::string class_string;
 
     boost::property_tree::ptree pt;
     boost::property_tree::ptree annotation;
@@ -270,8 +276,6 @@ void exportBoundingBoxesAsXML(json boundingBoxes, std::string path, std::string 
       // now do the keys in each object
       boost::property_tree::ptree object;
       boost::property_tree::ptree entry;
-      entry.put_value(std::string("bbox"));
-      object.push_back(std::make_pair("name", entry));
       entry.put_value(std::string("Unspecified"));
       object.push_back(std::make_pair("pose", entry));
       entry.put_value(0);
@@ -283,6 +287,11 @@ void exportBoundingBoxesAsXML(json boundingBoxes, std::string path, std::string 
         std::string k = it3.key();
         if (k == "filename") {
           outputfilename = it3.value(); // should be always the same filename
+        }
+        if (k == "class") {
+          class_string = it3.value();
+          entry.put_value(std::string(class_string));
+          object.push_back(std::make_pair("name", entry));
         }
         if (k == "imagewidth") {
           width = it3.value();
@@ -369,6 +378,9 @@ int main(int argc, char **argv) {
       break;
     case VERBOSE:
       verbose = true;
+      break;
+    case TWOCLASS:
+      twoclass = true;
       break;
     case DICOMS:
       if (opt.arg) {
@@ -1110,6 +1122,9 @@ int main(int argc, char **argv) {
         fprintf(stdout, "bitmap font min %f and max %f\n", pmi, pma); */
         std::vector<int> boundingBox = {INT_MAX, INT_MAX, 0, 0}; // xmin, ymin, xmax, ymax
 
+        // if we have two class we need to decide here by chance if this box has text or not
+        bool leaveWithoutText = ((std::rand() % 2) == 0);
+
         // now copy the string in
         if (bitsAllocated == 16) {
           signed short *bvals = (signed short *)buffer;
@@ -1223,75 +1238,77 @@ int main(int argc, char **argv) {
         }
 
         // draw the text
-        if (bitsAllocated == 16) {
-          signed short *bvals = (signed short *)buffer;
-          for (int yi = 0; yi < HEIGHT; yi++) {
-            for (int xi = 0; xi < WIDTH; xi++) {
-              if (image_buffer[yi][xi] == 0)
-                continue;
-              // I would like to copy the value from image over to
-              // the buffer. At some good location...
-              int newx = px + xi;
-              int newy = py + yi;
-              int idx = newy * xmax + newx;
-              if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
-                continue;
-              if (image_buffer[yi][xi] == 0)
-                continue;
+        if (!leaveWithoutText) {
+          if (bitsAllocated == 16) {
+            signed short *bvals = (signed short *)buffer;
+            for (int yi = 0; yi < HEIGHT; yi++) {
+              for (int xi = 0; xi < WIDTH; xi++) {
+                if (image_buffer[yi][xi] == 0)
+                  continue;
+                // I would like to copy the value from image over to
+                // the buffer. At some good location...
+                int newx = px + xi;
+                int newy = py + yi;
+                int idx = newy * xmax + newx;
+                if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+                  continue;
+                if (image_buffer[yi][xi] == 0)
+                  continue;
 
-              // instead of blending we need to use a fixed overlay color
-              // we have image information between current_image_min_value and current_image_max_value
-              // we need to scale the image_buffer by those values.
-              float f = 0;
-              //float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 512.0 * current_image_max_value));
-              float v = 1.0f * image_buffer[yi][xi] / 255.0; // 0 to 1 for color, could be inverted if we have a white background
-              float w = 1.0f * bvals[idx] / current_image_max_value;
-              float alpha_blend = (v + w * (1.0f - v));
-              if (color_pen_color[0] == 0) { // instead of white on black do now black on white
-                alpha_blend = 1.0f - v;
+                // instead of blending we need to use a fixed overlay color
+                // we have image information between current_image_min_value and current_image_max_value
+                // we need to scale the image_buffer by those values.
+                float f = 0;
+                //float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 512.0 * current_image_max_value));
+                float v = 1.0f * image_buffer[yi][xi] / 255.0; // 0 to 1 for color, could be inverted if we have a white background
+                float w = 1.0f * bvals[idx] / current_image_max_value;
+                float alpha_blend = (v + w * (1.0f - v));
+                if (color_pen_color[0] == 0) { // instead of white on black do now black on white
+                  alpha_blend = 1.0f - v;
+                }
+
+                // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+                bvals[idx] = (signed short)std::max(
+                    0.0f, std::min(current_image_max_value, current_image_min_value + (alpha_blend) * (current_image_max_value - current_image_min_value)));
+                // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
               }
-
-              // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
-              bvals[idx] = (signed short)std::max(
-                  0.0f, std::min(current_image_max_value, current_image_min_value + (alpha_blend) * (current_image_max_value - current_image_min_value)));
-              // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
             }
-          }
-        } else if (bitsAllocated == 8) {
-          unsigned char *bvals = (unsigned char *)buffer;
-          for (int yi = 0; yi < HEIGHT; yi++) {
-            for (int xi = 0; xi < WIDTH; xi++) {
-              if (image_buffer[yi][xi] == 0)
-                continue;
-              // I would like to copy the value from image over to
-              // the buffer. At some good location...
-              int newx = px + xi;
-              int newy = py + yi;
-              int idx = newy * xmax + newx;
-              if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
-                continue;
-              if (image_buffer[yi][xi] == 0)
-                continue;
+          } else if (bitsAllocated == 8) {
+            unsigned char *bvals = (unsigned char *)buffer;
+            for (int yi = 0; yi < HEIGHT; yi++) {
+              for (int xi = 0; xi < WIDTH; xi++) {
+                if (image_buffer[yi][xi] == 0)
+                  continue;
+                // I would like to copy the value from image over to
+                // the buffer. At some good location...
+                int newx = px + xi;
+                int newy = py + yi;
+                int idx = newy * xmax + newx;
+                if (newx < 0 || newx >= xmax || newy < 0 || newy >= ymax)
+                  continue;
+                if (image_buffer[yi][xi] == 0)
+                  continue;
 
-              // instead of blending we need to use a fixed overlay color
-              // we have image information between current_image_min_value and current_image_max_value
-              // we need to scale the image_buffer by those values.
-              float f = 0;
-              //float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 512.0 * current_image_max_value));
-              float v = 1.0f * image_buffer[yi][xi] / 255.0; // 0 to 1 for color, could be inverted if we have a white background
-              float w = 1.0f * bvals[idx] / current_image_max_value;
-              float alpha_blend = (v + w * (1.0f - v));
-              if (color_pen_color[0] == 0) { // instead of white on black do now black on white
-                alpha_blend = 1.0f - v;
+                // instead of blending we need to use a fixed overlay color
+                // we have image information between current_image_min_value and current_image_max_value
+                // we need to scale the image_buffer by those values.
+                float f = 0;
+                //float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 512.0 * current_image_max_value));
+                float v = 1.0f * image_buffer[yi][xi] / 255.0; // 0 to 1 for color, could be inverted if we have a white background
+                float w = 1.0f * bvals[idx] / current_image_max_value;
+                float alpha_blend = (v + w * (1.0f - v));
+                if (color_pen_color[0] == 0) { // instead of white on black do now black on white
+                  alpha_blend = 1.0f - v;
+                }
+
+                // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
+                bvals[idx] = (signed short)std::max(
+                    0.0f, std::min(current_image_max_value, current_image_min_value + (alpha_blend) * (current_image_max_value - current_image_min_value)));
+                // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
               }
-
-              // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
-              bvals[idx] = (signed short)std::max(
-                  0.0f, std::min(current_image_max_value, current_image_min_value + (alpha_blend) * (current_image_max_value - current_image_min_value)));
-              // fprintf(stdout, "%d %d: %d\n", xi, yi, bvals[idx]);
             }
-          }
 
+          }
         }
         // we have a bounding box now for the text on this picture
         if (boundingBox[0] == INT_MAX) {
@@ -1322,7 +1339,7 @@ int main(int argc, char **argv) {
         bbox["height"] = std::round((boundingBox[3] - boundingBox[1]) / 2);
         bbox["imagewidth"] = xmax; // of the image
         bbox["imageheight"] = ymax;
-        bbox["class"] = "boundingBox";
+        bbox["class"] = leaveWithoutText?"background":"text";
         bbox["filename_source"] = std::filesystem::path(files[pickImageIdx]).filename();
         bbox["filename"] = std::filesystem::path(outputfilename).filename();
 
@@ -1353,7 +1370,7 @@ int main(int argc, char **argv) {
       bbox["imageheight"] = ymax;
       bbox["filename_source"] = std::filesystem::path(files[pickImageIdx]).filename();
       bbox["filename"] = std::filesystem::path(outputfilename).filename();
-      bbox["class"] = "boundingBox";
+      bbox["class"] = "background";
       bboxes[bboxes.size()] = bbox;
     }
 
