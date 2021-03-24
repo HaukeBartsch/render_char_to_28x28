@@ -99,16 +99,16 @@ void process_png_file( char *buf) {
     // we should have enough space in buf to add our values there (width, height, 16bit)
     size_t counter = 0;
     int16_t *b = (int16_t *)buf;
-  for (int y = 0; y < height; y++) {
-    png_bytep row = row_pointers[y];
-    for (int x = 0; x < width; x++) {
-      png_bytep px = &(row[x * 4]);
-      // Do something awesome for each pixel here...
-      b[counter] = (signed short)((px[0] + px[1] + px[2])/3.0);
-      counter++;
-      //printf("%4d, %4d = RGBA(%3d, %3d, %3d, %3d)\n", x, y, px[0], px[1], px[2], px[3]);
+    for (int y = 0; y < height; y++) {
+        png_bytep row = row_pointers[y];
+        for (int x = 0; x < width; x++) {
+            png_bytep px = &(row[x * 4]);
+            // Do something awesome for each pixel here...
+            b[counter] = (signed short)( (0.3 * px[0]) + (0.59 * px[1]) + (0.11 * px[2]) );
+            counter++;
+            //printf("%4d, %4d = RGBA(%3d, %3d, %3d, %3d)\n", x, y, px[0], px[1], px[2], px[3]);
+        }
     }
-  }
 }
 
 
@@ -152,14 +152,14 @@ void InitializeGDCMImage(gdcm::Image* imagePtr, char *buf) {
   double dirCos[6]={1.,0.,0.,0.,1.,0.};
   imagePtr->SetDirectionCosines( dirCos );
 
-  char *buffer = new char[width*height*sizeof(int16_t)];
+  // char *buffer = new char[width*height*sizeof(int16_t)];
   // add values here from png
 
 
   imagePtr->SetPixelFormat( gdcm::PixelFormat::INT16 );
   imagePtr->GetDataElement().SetByteValue( (char *)buf/* buffer */ , width*height*sizeof(int16_t) );
   imagePtr->GetPixelFormat().SetSamplesPerPixel(1);
-  delete[] buffer;
+  // delete[] buffer;
 }
 
 
