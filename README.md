@@ -270,3 +270,22 @@ jq -r '[.[][]] | (map(keys) | add | unique) as $cols | map(. as $row | $cols | m
 ## Output format
 
 In case that the png format is selected as the output format the program will assume that the user also wants the bounding box information in a separate folder annotations/ in the PASCAL VOC XML format. This format consists of a separate xml file for each image file with the information on the annotations placed on the image.
+
+# Convert png files to DICOM
+
+The render_char_to_28x28 program requires DICOM files as a source of the underlying image information. Some of the sources for such data contain only PNG file format coded files. Usually this is done because DICOM meta data can contain sensitive information and the developers of the image resources don't want to or don't know how to anonymize that kind of information. The png162dcm program which is part of this repository can be used to convert such PNG files into DICOM files with a minimal header suitable for render_char_to_28x28.
+
+```
+Convert png images (16bit) to DICOM with a random header.
+USAGE: png162dcm [options]
+
+Options:
+  --help        Print this help message.
+  --input, -i   Input PNG file.
+  --output, -o  Output directory, if not specified the input folder will be used
+                instead.
+
+Examples:
+  ./png162dcm -i data/test.png -o /tmp/
+  ./png162dcm --help
+```
