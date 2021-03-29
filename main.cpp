@@ -156,7 +156,7 @@ const option::Descriptor usage[] = {
     {CONFIG, 0, "c", "config", Arg::Required,
      "  --config, -c \tConfiguration file for text generation."},
     {EXPORTTYPE, 0, "e", "export_type", Arg::Required,
-     "  --export_type, -e \tFile format for output (\"dcm\" by default, or \"png\")."},
+     "  --export_type, -e \tFile format for output (\"dcm\" by default, or \"png\"). Only if the png option is used the PASCAL VOC annotation folder with xml files will be created."},
     {RANDOMSEED, 0, "s", "random_seed", Arg::Required,
      "  --random_seed, -s \tSpecify random seed for text placement (default random)."},
     {BATCH, 0, "b", "batch", Arg::Required,
@@ -164,10 +164,11 @@ const option::Descriptor usage[] = {
     {VERBOSE, 0, "v", "verbose", Arg::None,
      "  --verbose, -v \tVerbose output."},
     {TWOCLASS, 0, "m", "multiclass", Arg::None,
-     "  --multiclass, -m \tProvide examples for text and for non-text objects. Default is that only bounding boxes for actual text are generated."},
+     "  --multiclass, -m \tProvide examples for text (\"text\") and for non-text (\"background\") objects. Default is that only bounding boxes for actual text are generated."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
-     "  ./renderText -d data/LIDC-IDRI-0009 -c forwardModel.json -o /tmp/bla -e png -t 100 -v\n"
+     "  ./renderText -d data/LIDC-IDRI-0009 -c forwardModel.json \\\n"
+     "               -o /tmp/bla -e png -t 100 -v -m\n"
      "  ./renderText --help\n"},
     {0, 0, 0, 0, 0, 0}};
 

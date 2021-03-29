@@ -247,16 +247,20 @@ Options:
   --targetnum, -t   Number of image pairs to be created. Images are chosen at
                     random from the DICOM folder.
   --config, -c      Configuration file for text generation.
-  --export_type, -e File format for output ("dcm" by default, or "png").
+  --export_type, -e File format for output ("dcm" by default, or "png"). Only if
+                    the png option is used the PASCAL VOC annotation folder with
+                    xml files will be created.
   --random_seed, -s Specify random seed for text placement (default random).
   --batch, -b       A string prepended to the numbered files to allow for
                     repeated creation of samples without overwrite.
-  --multiclass, -m  Create a background and a text class at a rate of 50% 
-                    (default is only a bbox class is created).
   --verbose, -v     Verbose output.
+  --multiclass, -m  Provide examples for text ("text") and for non-text
+                    ("background") objects. Default is that only bounding boxes
+                    for actual text are generated.
 
 Examples:
-  ./renderText -d data/LIDC-IDRI-0009 -c forwardModel.json -o /tmp/bla -e png -t 100 -v
+  ./renderText -d data/LIDC-IDRI-0009 -c forwardModel.json \
+               -o /tmp/bla -e png -t 100 -v -m
   ./renderText --help
 ```
 
