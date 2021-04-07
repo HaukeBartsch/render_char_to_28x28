@@ -1125,6 +1125,9 @@ int main(int argc, char **argv) {
 
         // if we have two class we need to decide here by chance if this box has text or not
         bool leaveWithoutText = ((std::rand() % 2) == 0);
+        if (!twoclass) {
+          leaveWithoutText = false;
+        }
 
         // now copy the string in
         if (bitsAllocated == 16) {
