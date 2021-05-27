@@ -320,7 +320,7 @@ int main(int argc, char **argv) {
 
   write_png_file(output.c_str());
 
-  fprintf(stdout, "wrote: \"%s\"\n", output.c_str());
+  fprintf(stdout, "wrote: \"%s\"\n", output.c_str()); fflush(stdout);
 
   return 0;
 }
