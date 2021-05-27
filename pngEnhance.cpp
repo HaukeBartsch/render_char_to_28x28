@@ -133,13 +133,13 @@ void write_png_file(const char *filename) {
 
 inline void fixborder(int *i, int *j, int width, int height) {
             if ((*i) < 0)
-              *i = width-1+(*i);
-            if (*j < 0)
-              *j = height-1+(*j);
+              *i = 0; // width-1+(*i);
+            if ((*j) < 0)
+              *j = 0; // height-1+(*j);
             if (*i >= width)
-              *i = (*i) - width - 1;
+              *i = width-1; // (*i) - width - 1;
             if (*j >= height)
-              *j = (*j) - height - 1;
+              *j = height - 1; // (*j) - height - 1;
 }
 
 void process_png_file( char *buf) {
