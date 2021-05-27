@@ -293,3 +293,24 @@ Examples:
   ./png162dcm -i data/test.png -o /tmp/
   ./png162dcm --help
 ```
+
+# Enhance pixel manipulations in images
+
+In order to check if an image contains pixel manipulations simple techniques such as adjustements for brightness and contrast are sufficient to recover some hidden information. In order to verify if such regions exist the pngEnhance program is converting an input PNG image using local intensity and contrast adjustments. The resulting image can be used to screen for regions in the image that might retain image information. 
+
+Please be very mindful with this program. It should not be applied to images you do not own. Only apply this technique during development of your own algorihms. Always use in-painting methods to make it impossible to recover removed burned in image information.
+
+```
+Enhances a png images (16bit) to make pixel changes more visible.
+USAGE: pngEnhance [options]
+
+Options:
+  --help        Print this help message.
+  --input, -i   Input PNG file.
+  --output, -o  Output directory, if not specified the input folder will be used
+                instead.
+
+Examples:
+  ./pngEnhance -i data/test.png -o /tmp/
+  ./pngEnhance --help
+```
