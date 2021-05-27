@@ -5,12 +5,12 @@ project (renderText)
 # set (CMAKE_CXX_STANDARD 11)
 IF("${CMAKE_SYSTEM}" MATCHES "Linux")
    set (CMAKE_CXX_STANDARD 17)
-   SET(CMAKE_CXX_FLAGS "-std=c++17 -I/usr/local/include -I/usr/include")
+   SET(CMAKE_CXX_FLAGS "-std=c++20 -I/usr/local/include -I/usr/include")
 ELSE()
    # find the correct path for isysroot with `xcrun --show-sdk-path`
    # /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
    # SET(CMAKE_CXX_FLAGS "-std=c++11 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include")
-   SET(CMAKE_CXX_FLAGS "-std=c++11 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -I/usr/local/include")
+   SET(CMAKE_CXX_FLAGS "-std=c++20 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -I/usr/local/include")
 ENDIF()
 
 FIND_LIBRARY(LIBXML2_LIBRARY NAMES xml2)
@@ -55,3 +55,7 @@ target_link_libraries(renderText gdcmCommon gdcmMEXD gdcmMEXD gdcmMSFF gdcmDICT 
 add_executable (png162dcm png162dcm.cpp ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories (png162dcm PUBLIC ${GDCM_BINARY_DIR}/Source/Common ${GDCM_SOURCE_DIR}/Source/Common ${GDCM_SOURCE_DIR}/Source/MediaStorageAndFileFormat ${LIBXML2_INCLUDE_DIR} /usr/include)
 target_link_libraries(png162dcm gdcmCommon gdcmMEXD gdcmMEXD gdcmMSFF gdcmDICT gdcmDSED ${LIBXML2_LIBRARY} ${JPEG_LIBRARY} ${ZLIB_LIBRARY} ${XLST_LIBRARY} ${Boost_LIBRARIES} ${PNG_LIBRARY} pthread)
+
+add_executable (pngEnhance pngEnhance.cpp ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories (pngEnhance PUBLIC ${LIBXML2_INCLUDE_DIR} /usr/include)
+target_link_libraries(pngEnhance ${LIBXML2_LIBRARY} ${JPEG_LIBRARY} ${ZLIB_LIBRARY} ${XLST_LIBRARY} ${Boost_LIBRARIES} ${PNG_LIBRARY} pthread)

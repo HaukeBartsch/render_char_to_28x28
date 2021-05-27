@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <filesystem>
+#include <numeric>
+
 #include <sys/stat.h>
 #include "optionparser.h"
 
@@ -81,7 +83,7 @@ void read_png_file(const char *filename) {
   png_destroy_read_struct(&png, &info, NULL);
 }
 
-void write_png_file(char *filename) {
+void write_png_file(const char *filename) {
   int y;
 
   FILE *fp = fopen(filename, "wb");
@@ -97,12 +99,12 @@ void write_png_file(char *filename) {
 
   png_init_io(png, fp);
 
-  // Output is 8bit depth, RGBA format.
+  // Output is 16bit depth, RGBA format.
   png_set_IHDR(
     png,
     info,
     width, height,
-    8,
+    16,
     PNG_COLOR_TYPE_RGBA,
     PNG_INTERLACE_NONE,
     PNG_COMPRESSION_TYPE_DEFAULT,
@@ -129,7 +131,19 @@ void write_png_file(char *filename) {
   png_destroy_write_struct(&png, &info);
 }
 
+inline void fixborder(int *i, int *j, int width, int height) {
+            if ((*i) < 0)
+              *i = width-1+(*i);
+            if (*j < 0)
+              *j = height-1+(*j);
+            if (*i >= width)
+              *i = (*i) - width - 1;
+            if (*j >= height)
+              *j = (*j) - height - 1;
+}
+
 void process_png_file( char *buf) {
+    fprintf(stdout, "start processing the image...\n");
     // we should have enough space in buf to add our values there (width, height, 16bit)
     size_t counter = 0;
     int16_t *b = (int16_t *)buf;
@@ -145,31 +159,34 @@ void process_png_file( char *buf) {
     }
     // now enhance the black and white version (use values in buf and write result to image)
     counter = 0;
+    std::vector<int16_t> intensities;
     for (int y = 0; y < height; y++) {
+        fprintf(stdout, "row: %d\r", y);
         png_bytep row = row_pointers[y];
         int i, j;
+        int idx;
         for (int x = 0; x < width; x++) {
+            intensities.resize(0);
             png_bytep px = &(row[x * 4]);
-            i = x+0; j = y+0;
-            int idx00 = (i) * width + (j); // b[idx00];
+            for (int sx = -5; sx <= 5; sx++) {
+              for (int sy = -5; sy <= 5; sy++) {
+                i = x+sx; j = y+sy;
+                //fprintf(stdout, "%d %d\t", i, j);
+                fixborder(&i,&j,width,height);
+                //fprintf(stdout, " fixed: %d %d width: %d height: %d\n", i, j, width, height); fflush(stdout);
+                idx = (j) * width + (i); // b[idx00];
+                intensities.push_back(b[idx]);
+              }
+            }
 
-            i = -1; j = 0;
-            if (i < 0)            
-              i = width-1;
-            if (j < 0)
-              j = height-1;
-            if (i >= width)
-              i = i - width;
-            if (j >= height)
-              j = j - height;
-            int idx_00 = (i) * width + (j); // b[idx_00]
-      
+            float sum = std::accumulate(intensities.begin(), intensities.end(), 0.0);
+            double mean = sum/intensities.size();
+            float sq_sum = std::inner_product(intensities.begin(), intensities.end(), intensities.begin(), 0.0);
+            double stdev = std::sqrt( (sq_sum / intensities.size()) - (mean * mean));
 
-            int16_t val = 0;
-
-            px[0] = val;
-            px[1] = val;
-            px[2] = val;
+            px[0] = 4069 + 100.0*(((double)b[y*width + x] - mean)/(2.0*stdev));
+            px[1] = px[0];
+            px[2] = px[0];
         }
     }
 }
@@ -265,12 +282,12 @@ int main(int argc, char **argv) {
   }
 
   if (output == "") {
-      output = std::filesystem::path(input_path).replace_extension(".dcm");
+      output = std::filesystem::path(input_path).replace_extension(".png");
   } else {
       // if an output is provided and its only a directory add the name of the input file
       if (std::filesystem::is_directory(std::filesystem::path(output))) {
           output = output + std::string(std::filesystem::path(input_path).filename());
-          output = std::filesystem::path(output).replace_extension(".dcm");
+          output = std::filesystem::path(output).replace_extension(".png");
       }
   }
 
