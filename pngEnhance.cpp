@@ -192,7 +192,7 @@ void process_png_file( char *buf) {
               v = 4096 + 4096.0*(((double)b[y*width + x] - mean)/(2.0*stdev));
               v = std::max((double)0.0, std::min((double)4096.0,(double)v));
             }
-            px[0] = (unsigned char)v;
+            px[0] = v;
             px[1] = px[0];
             px[2] = px[0];
         }
