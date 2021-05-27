@@ -104,7 +104,7 @@ void write_png_file(const char *filename) {
     png,
     info,
     width, height,
-    16,
+    bit_depth,
     PNG_COLOR_TYPE_RGBA,
     PNG_INTERLACE_NONE,
     PNG_COMPRESSION_TYPE_DEFAULT,
@@ -168,8 +168,8 @@ void process_png_file( char *buf) {
         for (int x = 0; x < width; x++) {
             intensities.resize(0);
             png_bytep px = &(row[x * 4]);
-            for (int sx = -5; sx <= 5; sx++) {
-              for (int sy = -5; sy <= 5; sy++) {
+            for (int sx = -7; sx <= 7; sx++) {
+              for (int sy = -7; sy <= 7; sy++) {
                 i = x+sx; j = y+sy;
                 //fprintf(stdout, "%d %d\t", i, j);
                 fixborder(&i,&j,width,height);
@@ -184,7 +184,15 @@ void process_png_file( char *buf) {
             float sq_sum = std::inner_product(intensities.begin(), intensities.end(), intensities.begin(), 0.0);
             double stdev = std::sqrt( (sq_sum / intensities.size()) - (mean * mean));
 
-            px[0] = 4069 + 100.0*(((double)b[y*width + x] - mean)/(2.0*stdev));
+            double v = 0.0;
+            if (bit_depth == 8) {
+              v = 128 + 128.0*(((double)b[y*width + x] - mean)/(2.0*stdev));
+              v = std::max((double)0.0, std::min((double)255.0,(double)v));
+            } else {
+              v = 4096 + 4096.0*(((double)b[y*width + x] - mean)/(2.0*stdev));
+              v = std::max((double)0.0, std::min((double)4096.0,(double)v));
+            }
+            px[0] = (unsigned char)v;
             px[1] = px[0];
             px[2] = px[0];
         }
