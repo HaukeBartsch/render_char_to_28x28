@@ -147,11 +147,24 @@ void process_png_file( char *buf) {
     counter = 0;
     for (int y = 0; y < height; y++) {
         png_bytep row = row_pointers[y];
+        int i, j;
         for (int x = 0; x < width; x++) {
             png_bytep px = &(row[x * 4]);
-            int idx00 = (y+0) * width + (x+0); // b[idx00];
-            
-            int idx_00 = (y+0) * width + (x-1); // b[idx_00]
+            i = x+0; j = y+0;
+            int idx00 = (i) * width + (j); // b[idx00];
+
+            i = -1; j = 0;
+            if (i < 0)            
+              i = width-1;
+            if (j < 0)
+              j = height-1;
+            if (i >= width)
+              i = i - width;
+            if (j >= height)
+              j = j - height;
+            int idx_00 = (i) * width + (j); // b[idx_00]
+      
+
             int16_t val = 0;
 
             px[0] = val;
