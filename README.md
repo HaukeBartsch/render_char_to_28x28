@@ -305,10 +305,13 @@ Enhances a png images (16bit) to make pixel changes more visible.
 USAGE: pngEnhance [options]
 
 Options:
-  --help        Print this help message.
-  --input, -i   Input PNG file.
-  --output, -o  Output directory, if not specified the input folder will be used
-                instead.
+  --help              Print this help message.
+  --input, -i         Input PNG file.
+  --output, -o        Output directory, if not specified the input folder will
+                      be used instead.
+  --mask_size, -m     Size of the gliding window (default 5, use odd numbers like 3, 5, 7).
+  --std_multiple, -m  Multiple of the local standard deviation (default 2.0 to cover 2 times the standard variation).
+  --mode, -m          Computational method (MEAN_STD or KURTOSIS).
 
 Examples:
   ./pngEnhance -i data/test.png -o /tmp/

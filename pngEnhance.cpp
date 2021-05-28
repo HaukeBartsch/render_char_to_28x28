@@ -254,8 +254,8 @@ const option::Descriptor usage[] = {
     {HELP, 0, "", "help", Arg::None, "  --help  \tPrint this help message."},
     {INPUT, 0, "i", "input", Arg::Required, "  --input, -i  \tInput PNG file."},
     {OUTPUT, 0, "o", "output", Arg::Required, "  --output, -o  \tOutput directory, if not specified the input folder will be used instead."},
-    {MASK, 0, "m", "mask_size", Arg::Required, "  --mask_size, -m  \tSize of the gliding window (3, 5, 7)."},
-    {STD, 0, "s", "std_multiple", Arg::Required, "  --std_multiple, -m  \tMultiple of the local standard deviation (1, 2, 3, ...)."},
+    {MASK, 0, "m", "mask_size", Arg::Required, "  --mask_size, -m  \tSize of the gliding window (default 5, use odd numbers like 3, 5, 7, ...)."},
+    {STD, 0, "s", "std_multiple", Arg::Required, "  --std_multiple, -m  \tMultiple of the local standard deviation (default 2.0 to cover 2 times the local standard deviation)"},
     {MODE, 0, "e", "mode", Arg::Required, "  --mode, -m  \tComputational method (MEAN_STD or KURTOSIS)."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
