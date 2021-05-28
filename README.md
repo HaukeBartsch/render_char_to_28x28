@@ -311,7 +311,7 @@ Options:
                       be used instead.
   --mask_size, -m     Size of the gliding window (default 5, use odd numbers like 3, 5, 7).
   --std_multiple, -m  Multiple of the local standard deviation (default 2.0 to cover 2 times the standard variation).
-  --mode, -m          Computational method (MEAN_STD or KURTOSIS).
+  --mode, -m          Computational method (MEAN_STD or KURTOSIS/experimental).
 
 Examples:
   ./pngEnhance -i data/test.png -o /tmp/

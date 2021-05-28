@@ -202,30 +202,46 @@ void process_png_file( char *buf) {
             double v = 0.0;
             if (bit_depth == 8) {
               if (mode == MEAN_STD) {
-                v = 128 + 128.0*(((double)b[y*width + x] - mean)/(std_multiple*stdev));
+                if (stdev != 0)
+                  v = 128 + 128.0*(((double)b[y*width + x] - mean)/(std_multiple*stdev));
+                else
+                  v = 128 + 128.0*(((double)b[y*width + x] - mean));
+                //if (v != std::max((double)0.0, std::min((double)255.0,(double)v))) {
+                //  fprintf(stdout, "DIFF: %lf %lf\n", v, std::max((double)0.0, std::min((double)255.0,(double)v)));
+                //}
                 v = std::max((double)0.0, std::min((double)255.0,(double)v));
               } else {
                 v = 0.0;
                 for (int i = 0; i < intensities.size(); i++) {
+                  if (stdev != 0)
                     v += std::pow((intensities[i] - mean) / stdev, 4.0);
+                  else
+                    v += std::pow((intensities[i] - mean), 4.0);
                 }
                 v /= intensities.size();
 
                 v = 128 + 64.0*(v - 3.0);
                 v = std::max((double)0.0, std::min((double)255.0,(double)v));
               }
-            } else {
+            } else { // bit depth == 16
               if (mode == MEAN_STD) {
-                v = 4096 + 4096.0*(((double)b[y*width + x] - mean)/(std_multiple*stdev));
+                if (stdev != 0)
+                  v = 2048 + 2048.0*(((double)b[y*width + x] - mean)/(std_multiple*stdev));
+                else 
+                  v = 2048 + 2048.0*(((double)b[y*width + x] - mean));
+
                 v = std::max((double)0.0, std::min((double)4095.0,(double)v));
               } else {
                 v = 0.0;
                 for (int i = 0; i < intensities.size(); i++) {
+                  if (stdev != 0)
                     v += std::pow((intensities[i] - mean) / stdev, 4.0);
+                  else
+                    v += std::pow((intensities[i] - mean), 4.0);
                 }
                 v /= intensities.size();
 
-                v = 4096 + 4096.0*(v - 3.0);
+                v = 2048 + 2048.0*(v - 3.0);
                 v = std::max((double)0.0, std::min((double)4095.0,(double)v));
               }
             }
