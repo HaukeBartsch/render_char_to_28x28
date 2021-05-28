@@ -15,11 +15,16 @@
 #include "boost/date_time.hpp"
 #include "boost/filesystem.hpp"
 
+enum modeType { MEAN_STD, KURTOSIS };
+
 
 int width, height;
 png_byte color_type;
 png_byte bit_depth;
 png_bytep *row_pointers = NULL;
+int mask_size = 5;
+float std_multiple = 2.0f;
+int mode = MEAN_STD;
 
 void read_png_file(const char *filename) {
   FILE *fp = fopen(filename, "rb");
@@ -132,14 +137,23 @@ void write_png_file(const char *filename) {
 }
 
 inline void fixborder(int *i, int *j, int width, int height) {
-            if ((*i) < 0)
-              *i = 0; // width-1+(*i);
-            if ((*j) < 0)
-              *j = 0; // height-1+(*j);
-            if (*i >= width)
-              *i = width-1; // (*i) - width - 1;
-            if (*j >= height)
-              *j = height - 1; // (*j) - height - 1;
+  if ((*i) < 0)
+    *i = width+(*i);
+  if ((*j) < 0)
+    *j = height+(*j);
+  if (*i >= width) {
+    //fprintf(stdout, "FOUND: %d now %d\n", *i, width-((*i) % width));
+    *i = width-1-((*i) % width); // (*i) - width - 1;
+  }
+  if (*j >= height) {
+    //fprintf(stdout, "FOUND: %d now %d\n", *j, height-((*j) % height));
+    *j = height-1-((*j) % height); // (*i) - width - 1;
+  }
+
+/*  if ((*i) < 0 || (*j) < 0)
+    fprintf(stderr, "i: %d j: %d\n", *i, *j);
+  if ((*i) >= width || (*j) >= height)
+    fprintf(stderr, "i: %d j: %d\n", *i, *j); */
 }
 
 void process_png_file( char *buf) {
@@ -161,15 +175,16 @@ void process_png_file( char *buf) {
     counter = 0;
     std::vector<int16_t> intensities;
     for (int y = 0; y < height; y++) {
-        fprintf(stdout, "row: %d\r", y);
+        if (y % 10 == 0)  
+          fprintf(stdout, "image row: %04d/%d\r", y, height-1); fflush(stdout);
         png_bytep row = row_pointers[y];
         int i, j;
         int idx;
         for (int x = 0; x < width; x++) {
             intensities.resize(0);
             png_bytep px = &(row[x * 4]);
-            for (int sx = -7; sx <= 7; sx++) {
-              for (int sy = -7; sy <= 7; sy++) {
+            for (int sx = -mask_size; sx <= mask_size; sx++) {
+              for (int sy = -mask_size; sy <= mask_size; sy++) {
                 i = x+sx; j = y+sy;
                 //fprintf(stdout, "%d %d\t", i, j);
                 fixborder(&i,&j,width,height);
@@ -186,11 +201,33 @@ void process_png_file( char *buf) {
 
             double v = 0.0;
             if (bit_depth == 8) {
-              v = 128 + 128.0*(((double)b[y*width + x] - mean)/(2.0*stdev));
-              v = std::max((double)0.0, std::min((double)255.0,(double)v));
+              if (mode == MEAN_STD) {
+                v = 128 + 128.0*(((double)b[y*width + x] - mean)/(std_multiple*stdev));
+                v = std::max((double)0.0, std::min((double)255.0,(double)v));
+              } else {
+                v = 0.0;
+                for (int i = 0; i < intensities.size(); i++) {
+                    v += std::pow((intensities[i] - mean) / stdev, 4.0);
+                }
+                v /= intensities.size();
+
+                v = 128 + 64.0*(v - 3.0);
+                v = std::max((double)0.0, std::min((double)255.0,(double)v));
+              }
             } else {
-              v = 4096 + 4096.0*(((double)b[y*width + x] - mean)/(2.0*stdev));
-              v = std::max((double)0.0, std::min((double)4096.0,(double)v));
+              if (mode == MEAN_STD) {
+                v = 4096 + 4096.0*(((double)b[y*width + x] - mean)/(std_multiple*stdev));
+                v = std::max((double)0.0, std::min((double)4095.0,(double)v));
+              } else {
+                v = 0.0;
+                for (int i = 0; i < intensities.size(); i++) {
+                    v += std::pow((intensities[i] - mean) / stdev, 4.0);
+                }
+                v /= intensities.size();
+
+                v = 4096 + 4096.0*(v - 3.0);
+                v = std::max((double)0.0, std::min((double)4095.0,(double)v));
+              }
             }
             px[0] = v;
             px[1] = px[0];
@@ -208,7 +245,7 @@ struct Arg : public option::Arg {
   }
 };
 
-enum optionIndex { UNKNOWN, INPUT, OUTPUT, HELP };
+enum optionIndex { UNKNOWN, INPUT, OUTPUT, MASK, STD, MODE, HELP };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
      "Enhances a png images (16bit) to make pixel changes more visible.\n"
@@ -217,6 +254,9 @@ const option::Descriptor usage[] = {
     {HELP, 0, "", "help", Arg::None, "  --help  \tPrint this help message."},
     {INPUT, 0, "i", "input", Arg::Required, "  --input, -i  \tInput PNG file."},
     {OUTPUT, 0, "o", "output", Arg::Required, "  --output, -o  \tOutput directory, if not specified the input folder will be used instead."},
+    {MASK, 0, "m", "mask_size", Arg::Required, "  --mask_size, -m  \tSize of the gliding window (3, 5, 7)."},
+    {STD, 0, "s", "std_multiple", Arg::Required, "  --std_multiple, -m  \tMultiple of the local standard deviation (1, 2, 3, ...)."},
+    {MODE, 0, "e", "mode", Arg::Required, "  --mode, -m  \tComputational method (MEAN_STD or KURTOSIS)."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
      "  ./pngEnhance -i data/test.png -o /tmp/\n"
@@ -269,6 +309,36 @@ int main(int argc, char **argv) {
         exit(-1);
       }
       break;
+    case MODE:
+      if (opt.arg) {
+        // fprintf(stdout, "--input '%s'\n", opt.arg);
+        if (strcmp(opt.arg, "MEAN_STD") == 0)
+          mode = MEAN_STD;
+        else
+          mode = KURTOSIS;
+      } else {
+        fprintf(stdout, "--mode needs to be either MEAN_STD or KURTOSIS\n");
+        exit(-1);
+      }
+      break;
+    case MASK:
+      if (opt.arg) {
+        // fprintf(stdout, "--input '%s'\n", opt.arg);
+        mask_size = std::atoi(opt.arg);
+      } else {
+        fprintf(stdout, "--mask_size needs a number specified (3, 5, 7)\n");
+        exit(-1);
+      }
+      break;
+    case STD:
+      if (opt.arg) {
+        // fprintf(stdout, "--input '%s'\n", opt.arg);
+        std_multiple = std::atof(opt.arg);
+      } else {
+        fprintf(stdout, "--std_multiple needs a number specified (1.0, 2.0, ...)\n");
+        exit(-1);
+      }
+      break;
     case OUTPUT:
       if (opt.arg) {
         // fprintf(stdout, "--output '%s'\n", opt.arg);
@@ -298,6 +368,7 @@ int main(int argc, char **argv) {
           output = std::filesystem::path(output).replace_extension(".png");
       }
   }
+  fprintf(stdout, "Run with:\n\tmask size: %d\n\tstandard deviation multiple: %f\n\tMode: %d\n", mask_size, std_multiple, mode);
 
   read_png_file(input_path.c_str());
 
