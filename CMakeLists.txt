@@ -9,7 +9,7 @@ IF("${CMAKE_SYSTEM}" MATCHES "Linux")
 ELSE()
    # find the correct path for isysroot with `xcrun --show-sdk-path`
    # /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
-   # SET(CMAKE_CXX_FLAGS "-std=c++11 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include")
+   # SET(CMAKE_CXX_FLAGS "-std=c++7 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include")
    SET(CMAKE_CXX_FLAGS "-std=c++20 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -I/usr/local/include")
 ENDIF()
 

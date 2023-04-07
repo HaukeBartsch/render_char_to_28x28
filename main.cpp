@@ -59,7 +59,7 @@
 //#include <boost/gil/extension/io/png_io.hpp>
 //#include <boost/gil/extension/io/png_dynamic_io.hpp>
 using namespace boost::gil;
-
+using namespace boost::filesystem;
 
 // Short alias for this namespace
 namespace pt = boost::property_tree;
@@ -183,7 +183,8 @@ std::vector<std::string> listFilesSTD(const std::vector<std::string> &paths, boo
       // std::cout << *dir << "\n";  // full path
       if (is_regular_file(dir->path())) {
         // reading zip and tar files might take a lot of time.. filter out here
-        extension = boost::filesystem::extension(dir->path());
+        boost::filesystem::path bpath(dir->path());
+        extension = bpath.extension().string();
         if (extension == ".tar" || extension == ".gz" || extension == ".zip" || extension == ".tgz" ||
             extension == ".bz2")
           continue;
@@ -1344,8 +1345,8 @@ int main(int argc, char **argv) {
         bbox["imagewidth"] = xmax; // of the image
         bbox["imageheight"] = ymax;
         bbox["class"] = leaveWithoutText?"background":"text";
-        bbox["filename_source"] = std::filesystem::path(files[pickImageIdx]).filename();
-        bbox["filename"] = std::filesystem::path(outputfilename).filename();
+        bbox["filename_source"] = boost::filesystem::path(files[pickImageIdx]).filename();
+        bbox["filename"] = boost::filesystem::path(outputfilename).filename();
 
         // we can also get bounding boxes that don't have an area (height or width == 0 due to rounding)
         if (bbox["width"] < 1 || bbox["height"] < 1) // in pixel correct?
@@ -1372,8 +1373,8 @@ int main(int argc, char **argv) {
       bbox["height"] = 0;
       bbox["imagewidth"] = xmax; // of the image
       bbox["imageheight"] = ymax;
-      bbox["filename_source"] = std::filesystem::path(files[pickImageIdx]).filename();
-      bbox["filename"] = std::filesystem::path(outputfilename).filename();
+      bbox["filename_source"] = boost::filesystem::path(files[pickImageIdx]).filename();
+      bbox["filename"] = boost::filesystem::path(outputfilename).filename();
       bbox["class"] = "background";
       bboxes[bboxes.size()] = bbox;
     }
