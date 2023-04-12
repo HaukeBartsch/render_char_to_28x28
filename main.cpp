@@ -491,6 +491,11 @@ int main(int argc, char **argv) {
               root.get_child("model").get_value<std::string>().c_str());
       fprintf(stdout, "%s\n", root.get_child("description").get_value<std::string>().c_str());
     }
+    if (font_path != "") {
+      // add the manually specified font to the font_paths array
+      font_paths.push_back(font_path);
+    }
+
     //
     // Check for a random font
     //
@@ -710,7 +715,24 @@ int main(int argc, char **argv) {
   //  }
 
   int font_length = 20;
- 
+
+  // check for the available fonts first
+  if (font_paths.size() == 0) {
+    fprintf(stderr, "Error: No valid font files specified\n");
+    exit(-1);
+  }
+  if (font_sizes.size() == 0) {
+    // assert that size of font_sizes is same as size of font_paths
+
+    // add a default size array
+    std::vector<int> this_font_sizes = {6, 8, 10, 11, 12};
+    font_sizes.push_back(this_font_sizes);
+  }
+  if (face_indexes.size() == 0) {
+    std::vector<int> this_face_indexes = {0};
+    face_indexes.push_back(this_face_indexes);
+  }
+
   // const char *filename = font_path.c_str(); /* first argument     */
   // std::map<std::string, std::vector<bbox_t>> boundingBoxes;
   json boundingBoxes = json::object();
@@ -721,8 +743,11 @@ int main(int argc, char **argv) {
     //
     // for every new DICOM image we randomize some things
     //
+    // fprintf(stdout, "font paths size is: %lu\n", font_paths.size());
+    // fflush(stdout);
     int idx = std::rand() % font_paths.size();
     font_path = font_paths[idx]; // use a random font
+    // fprintf(stdout, "font sizes array is: %d\n", font_sizes.size());
     int idx2 = std::rand() % font_sizes[idx].size();
     font_size = font_sizes[idx][idx2];
     int idx3 = std::rand() % face_indexes[idx].size();
@@ -1345,8 +1370,8 @@ int main(int argc, char **argv) {
         bbox["imagewidth"] = xmax; // of the image
         bbox["imageheight"] = ymax;
         bbox["class"] = leaveWithoutText?"background":"text";
-        bbox["filename_source"] = boost::filesystem::path(files[pickImageIdx]).filename();
-        bbox["filename"] = boost::filesystem::path(outputfilename).filename();
+        bbox["filename_source"] = boost::filesystem::path(files[pickImageIdx]).filename().string();
+        bbox["filename"] = boost::filesystem::path(outputfilename).filename().string();
 
         // we can also get bounding boxes that don't have an area (height or width == 0 due to rounding)
         if (bbox["width"] < 1 || bbox["height"] < 1) // in pixel correct?
@@ -1373,8 +1398,8 @@ int main(int argc, char **argv) {
       bbox["height"] = 0;
       bbox["imagewidth"] = xmax; // of the image
       bbox["imageheight"] = ymax;
-      bbox["filename_source"] = boost::filesystem::path(files[pickImageIdx]).filename();
-      bbox["filename"] = boost::filesystem::path(outputfilename).filename();
+      bbox["filename_source"] = boost::filesystem::path(files[pickImageIdx]).filename().string();
+      bbox["filename"] = boost::filesystem::path(outputfilename).filename().string();
       bbox["class"] = "background";
       bboxes[bboxes.size()] = bbox;
     }

@@ -25,7 +25,7 @@
 
 #include "boost/date_time.hpp"
 #include "boost/filesystem.hpp"
-
+using namespace boost::filesystem;
 
 int width, height;
 png_byte color_type;
@@ -248,19 +248,19 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  if (!std::filesystem::exists(input_path)) {
-      fprintf(stderr, "Error: input file \"%s\" does not exist.\n", input_path.c_str());
-      exit(-1);
+  if (!boost::filesystem::exists(input_path)) {
+    fprintf(stderr, "Error: input file \"%s\" does not exist.\n", input_path.c_str());
+    exit(-1);
   }
 
   if (output == "") {
-      output = std::filesystem::path(input_path).replace_extension(".dcm");
+    output = boost::filesystem::path(input_path).replace_extension(".dcm").string();
   } else {
       // if an output is provided and its only a directory add the name of the input file
-      if (std::filesystem::is_directory(std::filesystem::path(output))) {
-          output = output + std::string(std::filesystem::path(input_path).filename());
-          output = std::filesystem::path(output).replace_extension(".dcm");
-      }
+    if (boost::filesystem::is_directory(boost::filesystem::path(output))) {
+    output = output + boost::filesystem::path(input_path).filename().string();
+    output = boost::filesystem::path(output).replace_extension(".dcm").string();
+    }
   }
 
   read_png_file(input_path.c_str());
@@ -282,7 +282,7 @@ int main(int argc, char **argv) {
   InitializeGDCMImage(imagePtr, buf);
   InitializeGDCMFile( filePtr );
 
-  std::string dn = std::filesystem::path(output).parent_path();
+  std::string dn = boost::filesystem::path(output).parent_path().string();
   { // create the output folder if it does not exist yet
     struct stat buf;
     if (!(stat(dn.c_str(), &buf) == 0)) {
