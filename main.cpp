@@ -228,8 +228,14 @@ std::vector<std::u32string> generateRandomText(int len) {
   //  tmp_s += alphanum[std::rand() % (sizeof(alphanum) - 1)];
   // for (int i = 0; i < len; ++i)
   //  tmp_s += unicodeChars[std::rand() % (unicodeChars.size() - 1)];
-  for (int i = 0; i < len; ++i)
-    tmp_s.push_back(unicodeChars[std::rand() % (unicodeChars.size() - 1)]);
+  for (int i = 0; i < len; ++i) {
+    int idx = std::rand() % (unicodeChars.size() - 1);
+    while ((i == 0 || i == len - 1) && unicodeChars[idx] == U" ") {
+      // I don't accept that
+      idx = std::rand() % (unicodeChars.size() - 1); // try again
+    }
+    tmp_s.push_back(unicodeChars[idx]);
+  }
 
   // std::cout << tmp_s << std::endl;
   // std::cout << unicodeChars << std::endl;
@@ -998,7 +1004,7 @@ int main(int argc, char **argv) {
     // lets do all the text placements
     for (int placement = 0; placement < placements.size(); placement++) {
       { // color setting by placement
-        int idx = std::rand() % colors.size();
+        int idx = std::rand() % colors.size(); // colors.size() should not be 0
         if (verbose)
           fprintf(stdout, "  Select color set %d, opacity of background: %f\n", idx, colors[idx][7]);
         // size here is how much bigger the background is supposed to be compared to the bounding box of the text.
@@ -1358,20 +1364,21 @@ int main(int argc, char **argv) {
           // bbox.name += text2print[a].c_str();
         }
         //bbox["text"] = json::parse(text2print);
-        bbox["name"] = std::string(o.str());
+        bbox["name"] = leaveWithoutText ? std::string("") : std::string(o.str());
         bbox["xmin"] = boundingBox[0];
         bbox["ymin"] = boundingBox[1];
         bbox["xmax"] = boundingBox[2];
         bbox["ymax"] = boundingBox[3];
-        bbox["x"] = boundingBox[0] + std::round((boundingBox[2] - boundingBox[0]) / 2);
-        bbox["y"] = boundingBox[1] + std::round((boundingBox[3] - boundingBox[1]) / 2);
-        bbox["width"] = std::round((boundingBox[2] - boundingBox[0]) / 2);
-        bbox["height"] = std::round((boundingBox[3] - boundingBox[1]) / 2);
+        bbox["x"] = (int)(boundingBox[0] + std::round((boundingBox[2] - boundingBox[0]) / 2)); // center of bounding box
+        bbox["y"] = (int)(boundingBox[1] + std::round((boundingBox[3] - boundingBox[1]) / 2));
+        bbox["width"] = (int)(std::round((boundingBox[2] - boundingBox[0]))); // why is this half the distance?
+        bbox["height"] = (int)(std::round((boundingBox[3] - boundingBox[1])));
         bbox["imagewidth"] = xmax; // of the image
         bbox["imageheight"] = ymax;
         bbox["class"] = leaveWithoutText?"background":"text";
         bbox["filename_source"] = boost::filesystem::path(files[pickImageIdx]).filename().string();
         bbox["filename"] = boost::filesystem::path(outputfilename).filename().string();
+        bbox["draw_background_box"] = (fabs(color_background_color[3]) > 1e-6);
 
         // we can also get bounding boxes that don't have an area (height or width == 0 due to rounding)
         if (bbox["width"] < 1 || bbox["height"] < 1) // in pixel correct?
