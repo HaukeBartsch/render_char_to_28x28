@@ -143,7 +143,7 @@ struct Arg : public option::Arg {
 enum optionIndex { UNKNOWN, FONTFILE, OUTPUT, DICOMS, CONFIG, HELP, TARGETNUM, EXPORTTYPE, RANDOMSEED, VERBOSE, BATCH, TWOCLASS };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
-     "Create deep learning data from collection of DICOM files by adding text annotations.\n"
+     "Annotation detection sample data: Create deep learning data from collections of DICOM files by adding text annotations.\n"
      "USAGE: renderText [options]\n\n"
      "Options:"},
     {HELP, 0, "", "help", Arg::None, "  --help  \tPrint this help message."},
