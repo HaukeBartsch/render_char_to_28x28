@@ -275,6 +275,76 @@ std::vector<std::u32string> generateRandomText(int len)
   return tmp_s;
 }
 
+// The idea is to load all the glyphs from a predefined text and check
+// if any one of them is missing. Return the proportion of missing glyphs [0..1].
+float proportionOfGlyphsMissing(std::string font_file_name, int face_index, int font_size) {
+  std::vector<std::u32string> unicodeChars = {
+      U"0", U"1", U"2", U"3", U"4", U"5", U"6", U"7", U"8", U"9", U" ", U" ", U" ", U" ",
+      U" ", U" ", U"/", U"_", U"-", U".", U"A", U"B", U"C", U"D", U"E", U"F", U"G", U"H",
+      U"I", U"J", U"K", U"L", U"M", U"N", U"O", U"P", U"Q", U"R", U"S", U"T", U"U", U"V",
+      U"W", U"X", U"Y", U"Z", U"a", U"b", U"c", U"d", U"e", U"f", U"g", U"h", U"i", U"j",
+      U"k", U"l", U"m", U"n", U"o", U"p", U"q", U"r", U"s", U"t", U"u", U"v", U"w", U"x",
+      U"y", U"z", U"ø", U"æ", U"å", U"ö", U"ü", U"ä", U"(", U")", U"]", U"["};
+  FT_Library library;
+  FT_Face face;
+  FT_GlyphSlot slot;
+  FT_Matrix matrix; /* transformation matrix */
+  //FT_Vector pen;    /* untransformed origin  */
+  FT_Error error;
+  float angle = 0;                     // ( 25.0 / 360 ) * 3.14159 * 2;      /* use 25 degrees     */
+  //int target_height = HEIGHT;
+
+  error = FT_Init_FreeType(&library); /* initialize library */
+  /* error handling omitted */
+  if (error != 0)
+  {
+    fprintf(stderr,
+            "Error: The freetype libbrary could not be initialized with this font.\n");
+    exit(-1);
+  }
+
+  error = FT_New_Face(library, font_file_name.c_str(), face_index, &face); /* create face object */
+  if (face == NULL)
+  {
+    fprintf(stderr, "Error: no face found, provide the filename of a ttf file...\n");
+    return 1.0; // could not even get started 
+  }
+  float font_size_in_pixel = font_size;
+  error = FT_Set_Char_Size(face, font_size_in_pixel * 64, 0, 96, 0); /* set character size */
+  if (error != 0) {
+    return 1.0; // could not even get started with this font and the given size
+  }
+  slot = face->glyph;
+
+  /* set up matrix */
+  matrix.xx = (FT_Fixed)(cos(angle) * 0x10000L);
+  matrix.xy = (FT_Fixed)(-sin(angle) * 0x10000L);
+  matrix.yx = (FT_Fixed)(sin(angle) * 0x10000L);
+  matrix.yy = (FT_Fixed)(cos(angle) * 0x10000L);
+
+  /* the pen position in 26.6 cartesian space coordinates; */
+  /* start at (300,200) relative to the upper left corner  */
+  //pen.x = 1 * 64;
+  //pen.y = (target_height - 20) * 64;
+
+  float countMissing = 0;
+  for (int n = 0; n < unicodeChars.size(); n++)
+  {
+    /* set transformation */
+    // FT_Set_Transform(face, &matrix, &pen);
+    /* load glyph image into the slot (erase previous one) */
+    // unsigned long c = FT_Get_Char_Index(face, text2print[n]);
+    // error = FT_Load_Glyph(face, c, FT_LOAD_RENDER);
+
+    error = FT_Load_Char(face, unicodeChars[n][0], FT_LOAD_RENDER);
+    if (error)
+      countMissing += 1.0;
+  }
+  // everything is fine
+  fprintf(stdout, "font check: %f for %s\n", countMissing / unicodeChars.size(), font_file_name.c_str());
+  return countMissing / unicodeChars.size();
+}
+
 void exportBoundingBoxesAsXML(json boundingBoxes, std::string path, std::string folderWithText)
 {
   // we convert the json to a property_tree to save as XML
@@ -590,27 +660,42 @@ int main(int argc, char **argv)
             extension = bpath.extension().string();
             if (extension != ".ttf")
               continue;
+            // we should check if this font, font-size, index is suitable
+            // proportionOfGlyphsMissing
+            std::vector<int> this_font_sizes;
+            for (int fs = 6; fs < 18; fs+=2) {
+              if (proportionOfGlyphsMissing(std::string(dir->path().c_str()), 0, fs) < 0.1)
+                this_font_sizes.push_back(fs);
+            }
+            if (this_font_sizes.size() == 0)
+              continue; // do not use this font
+
             font_paths.push_back(dir->path().c_str());
+            font_sizes.push_back(this_font_sizes);
+
+            std::vector<int> this_face_indexes;
+            this_face_indexes.push_back(0);
+            face_indexes.push_back(this_face_indexes);
           }
         }
       }
       else if (boost::filesystem::is_regular_file(font_path) && boost::filesystem::exists(font_path))
       {
         // add the manually specified font to the font_paths array
-        font_paths.push_back(font_path);
-        // add some default sizes as well
         std::vector<int> this_font_sizes;
-        this_font_sizes.push_back(6);
-        this_font_sizes.push_back(8);
-        this_font_sizes.push_back(10);
-        this_font_sizes.push_back(12);
-        this_font_sizes.push_back(14);
-        this_font_sizes.push_back(16);
-        font_sizes.push_back(this_font_sizes);
+        for (int fs = 6; fs < 18; fs+=2) {
+          if (proportionOfGlyphsMissing(font_path, 0, fs) < 0.1)
+            this_font_sizes.push_back(fs);
+        }
+        if (this_font_sizes.size() > 0) {
+          font_paths.push_back(font_path);
+          // add some default sizes as well
+          font_sizes.push_back(this_font_sizes);
 
-        std::vector<int> this_face_indexes;
-        this_face_indexes.push_back(0);
-        face_indexes.push_back(this_face_indexes);
+          std::vector<int> this_face_indexes;
+          this_face_indexes.push_back(0);
+          face_indexes.push_back(this_face_indexes);
+        }
       }
     }
 
