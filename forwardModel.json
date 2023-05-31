@@ -35,18 +35,30 @@
                 ]
             }
         ],
-        "colors": [
+        "colors": [ 
             {
-                "name": "normal",
+                "name": "neutral",
+                "message": "assume transparent background and white as draw color",
                 "background_size": [0, 0, 0, 0],
                 "background_color": [0, 0, 0, 0],
+                "vary_percent": 30.0,
                 "pen_color": [255, 255, 255, 1]
             },
             {
-                "name": "inverted",
+                "name": "b/w",
+                "message": "assume opaque white as background and draw as black",
                 "background_size": [5, 10, 0, 1],
                 "background_color": [255, 255, 255, 1],
+                "vary_percent": 30.0,
                 "pen_color": [0, 0, 0, 1]
+            },
+            {
+                "name": "w/b",
+                "message": "assume opaque black as background and draw as white",
+                "background_size": [5, 10, 0, 1],
+                "pen_color": [255, 255, 255, 1],
+                "vary_percent": 30.0,
+                "background_color": [0, 0, 0, 1]
             }
         ],
         "placement": {

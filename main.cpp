@@ -3,6 +3,8 @@
                 -t 1
 */
 
+// TODO: change color of text relative to background
+//       may make detection more difficult.. use uniform distribution, maybe exclude intensity of background?
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -335,13 +337,17 @@ float proportionOfGlyphsMissing(std::string font_file_name, int face_index, int 
     /* load glyph image into the slot (erase previous one) */
     // unsigned long c = FT_Get_Char_Index(face, text2print[n]);
     // error = FT_Load_Glyph(face, c, FT_LOAD_RENDER);
+    if (FT_Get_Char_Index(face, unicodeChars[n][0]) == 0) {
+      countMissing += 1.0f;
+      continue;    
+    }
 
     error = FT_Load_Char(face, unicodeChars[n][0], FT_LOAD_RENDER);
     if (error)
-      countMissing += 1.0;
+      countMissing += 1.0f;
   }
   // everything is fine
-  fprintf(stdout, "font check: %f for %s\n", countMissing / unicodeChars.size(), font_file_name.c_str());
+  fprintf(stdout, "font check: characters missing = %0.2f%% for %s\n", 100.0f*(countMissing / unicodeChars.size()), font_file_name.c_str());
   return countMissing / unicodeChars.size();
 }
 
@@ -663,7 +669,7 @@ int main(int argc, char **argv)
             // we should check if this font, font-size, index is suitable
             // proportionOfGlyphsMissing
             std::vector<int> this_font_sizes;
-            for (int fs = 6; fs < 18; fs+=2) {
+            for (int fs = 6; fs < 14; fs+=2) {
               if (proportionOfGlyphsMissing(std::string(dir->path().c_str()), 0, fs) < 0.1)
                 this_font_sizes.push_back(fs);
             }
@@ -881,7 +887,7 @@ int main(int argc, char **argv)
 
   //
   // Read in the colors
-  //
+  // TODO: check what happens if a variable is not there
   std::vector<std::vector<float>> colors; // the background and pen color for the annotations
   if (configFileExists)
   {
@@ -912,6 +918,17 @@ int main(int argc, char **argv)
         float val = iter4->second.get_value<float>();
         this_background_size.push_back(val);
       }
+      // vary_percent
+      float vary_percent = iter->second.get_child("vary_percent").get_value<float>();
+      this_background_size.push_back(vary_percent);
+
+      /*auto bounds5 = iter->second.get_child("vary_percent").equal_range("");
+      for (auto iter5 = bounds5.first; iter5 != bounds4.second; ++iter5)
+      {
+        float val = iter5->second.get_value<float>();
+        this_background_size.push_back(val);
+      }*/
+      // if we don't have enough messages, skip attaching the array
       colors.push_back(this_background_size);
     }
   }
@@ -920,6 +937,7 @@ int main(int argc, char **argv)
   std::vector<float> color_background_size;  // a single choice, value between  the two specified, something like 0.1
   std::vector<float> color_background_color; // a single choice
   std::vector<float> color_pen_color;
+  float vary_percent;
 
   // we should find all DICOM files
   fprintf(stdout, "\n");
@@ -1276,12 +1294,17 @@ int main(int argc, char **argv)
         int idx = std::rand() % colors.size(); // colors.size() should not be 0
         if (verbose)
           fprintf(stdout, "  Select color set %d, opacity of background: %f\n", idx, colors[idx][7]);
+        if (colors[idx].size() < 13) {
+          fprintf(stderr, "Error: selected a colors entry that does not all variable defined, cancel.\n");
+          exit(-1);
+        }
         // size here is how much bigger the background is supposed to be compared to the bounding box of the text.
         // we draw the image, draw the background and draw the text (in that order)
         color_background_size = {colors[idx][0], colors[idx][1], colors[idx][2], colors[idx][3]};
         // a size of 0,0,0,0 indicates that no background needs to be drawn (default normal mode, text is white)
         color_background_color = {colors[idx][4], colors[idx][5], colors[idx][6], colors[idx][7]};
         color_pen_color = {colors[idx][8], colors[idx][9], colors[idx][10], colors[idx][11]};
+        vary_percent = colors[idx][12];
       }
       if (verbose)
         fprintf(stdout, "  Use placement: %d\n", placement);
@@ -1507,6 +1530,8 @@ int main(int argc, char **argv)
         else
         {
           fprintf(stderr, "Warning: Found bitsAllocation that we don't support %d\n", bitsAllocated);
+          fflush(stderr);
+          exit(-1);
         }
 
         // draw the background
@@ -1603,9 +1628,15 @@ int main(int argc, char **argv)
                 // we need to scale the image_buffer by those values.
                 float f = 0;
                 // float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 512.0 * current_image_max_value));
-                float v = 1.0f * image_buffer[yi][xi] / 255.0; // 0 to 1 for color, could be inverted if we have a white background
+                // in order to scale the color by the vary_percent value we can reduce the alpha_blend value by the percentage relative to zero
+                // vary_percent is ment to have a uniform distribution between the max and (max-vary_percent)
+                float reduce_by = ((double) std::rand() / (RAND_MAX)) * (vary_percent/100.0f);
+                float v = (1.0f * image_buffer[yi][xi] / 255.0)-reduce_by; // 0 to 1 for color, could be inverted if we have a white background
+                // clamp to 0 to 1
+                v = std::max(0.0f, std::min(1.0f, v));
                 float w = 1.0f * bvals[idx] / current_image_max_value;
                 float alpha_blend = (v + w * (1.0f - v));
+                // should be random value now not exceeding (vary_percent/100)
                 if (color_pen_color[0] == 0)
                 { // instead of white on black do now black on white
                   alpha_blend = 1.0f - v;
