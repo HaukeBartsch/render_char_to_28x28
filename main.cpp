@@ -3,8 +3,9 @@
                 -t 1
 */
 
-// TODO: change color of text relative to background
+// Done: change color of text relative to background
 //       may make detection more difficult.. use uniform distribution, maybe exclude intensity of background?
+// TODO: there is a gamma correction (use 1.8) needed before using the bitmap alpha value 
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,6 +13,7 @@
 #include <fstream>
 #include <codecvt>
 #include <filesystem>
+#include <exception>
 // #include <stxutif.h>
 
 #include <ft2build.h>
@@ -54,6 +56,10 @@
 #include <boost/gil/color_convert.hpp>
 #include <boost/gil/typedefs.hpp>
 #include <boost/gil/image_view_factory.hpp>
+
+#include "markov_chain.h"
+using namespace markov_chain_model;
+
 
 // #include <boost/gil/extension/io/png_io.hpp>
 // #include <boost/gil/extension/io/png_dynamic_io.hpp>
@@ -165,7 +171,8 @@ enum optionIndex
   RANDOMSEED,
   VERBOSE,
   BATCH,
-  TWOCLASS
+  TWOCLASS,
+  MARKOV
 };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
@@ -189,6 +196,7 @@ const option::Descriptor usage[] = {
      "  --batch, -b \tA string prepended to the numbered files to allow for repeated creation of samples without overwrite."},
     {VERBOSE, 0, "v", "verbose", Arg::None,
      "  --verbose, -v \tVerbose output."},
+    {MARKOV, 0, "a", "markov", Arg::Required, "  --markov, -a \tA file with domain text. If this option is provided text in images will be generated from a Markov model trained on the text data."},
     {TWOCLASS, 0, "m", "multiclass", Arg::None,
      "  --multiclass, -m \tProvide examples for text (\"text\") and for non-text (\"background\") objects. Default is that only bounding boxes for actual text are generated."},
     {UNKNOWN, 0, "", "", Arg::None,
@@ -277,6 +285,47 @@ std::vector<std::u32string> generateRandomText(int len)
   return tmp_s;
 }
 
+std::string generateMarkovText(int len, markov_chain &model)
+{
+
+  // check if the model has been trained yet
+  if ( model.num_states() == 0 ) {
+    fprintf(stderr, "Error: there is no sample added to the model yet.\n");
+    exit(-1);
+  }
+
+  const std::string delimiter(" ");
+  std::vector<std::string> first_words = { "Now", "Then", "Whilst", "She", "He", "It", "Look", "Ah!", "Come", "The", "True", "There" };
+  first_words.push_back(model.randomString());
+  first_words.push_back(model.randomString());
+  first_words.push_back(model.randomString());
+  std::reverse(first_words.begin(), first_words.end());
+
+  std::ostringstream o;
+  for (const std::string &word : first_words) {
+    try
+      {
+        model.generate_data(o, delimiter, word, [](const std::string &curr_word) -> bool
+        {
+          // check for a period to end our sentence
+          return curr_word.back() == '.';
+        });
+      }
+      catch (std::exception &e)
+      {
+        // std::cout << "Data generation failed starting from word '" << word << "'. Reason: " << e.what() << std::endl;
+        // don't print out anything
+      }
+  }
+  // get the strings out
+  std::string aa(o.str());
+  // can we convert the std::string to 
+
+
+  return aa;
+}
+
+
 // The idea is to load all the glyphs from a predefined text and check
 // if any one of them is missing. Return the proportion of missing glyphs [0..1].
 float proportionOfGlyphsMissing(std::string font_file_name, int face_index, int font_size) {
@@ -347,7 +396,7 @@ float proportionOfGlyphsMissing(std::string font_file_name, int face_index, int 
       countMissing += 1.0f;
   }
   // everything is fine
-  fprintf(stdout, "font check: characters missing = %0.2f%% for %s\n", 100.0f*(countMissing / unicodeChars.size()), font_file_name.c_str());
+  fprintf(stdout, "font check: %0.2f%% characters missing for %s [font size: %d]\n", 100.0f*(countMissing / unicodeChars.size()), font_file_name.c_str(), font_size);
   return countMissing / unicodeChars.size();
 }
 
@@ -491,6 +540,9 @@ int main(int argc, char **argv)
   std::string target_type = "dcm";
   std::string batch_string = "";
 
+  // if we use a text file to generate text we need such a model
+  markov_chain markov_model_text_generation;
+
   int target = 1;
   bool verbose = false;
 
@@ -516,6 +568,11 @@ int main(int argc, char **argv)
       if (opt.arg)
       {
         // fprintf(stdout, "--input '%s'\n", opt.arg);
+        // check if the path exists and cancel if not
+        if (!boost::filesystem::exists(opt.arg) || !boost::filesystem::is_directory(opt.arg)) {
+          fprintf(stderr, "Error: data directory (%s) could not be found.\n", opt.arg);
+          exit(-1);
+        }
         dicom_paths.push_back(opt.arg);
       }
       else
@@ -612,6 +669,21 @@ int main(int argc, char **argv)
         exit(-1);
       }
       break;
+    case MARKOV:
+      if (opt.arg) {
+        // train the model
+        // markov_model_text_generation
+        std::ifstream ifs(opt.arg);
+        size_t last_state = -1;
+        std::string word;
+        while (ifs >> word) {
+            last_state = markov_model_text_generation.record_sample(word, last_state);
+        }
+      } else {
+        fprintf(stderr, "--markov needs a text file path as argument");
+        exit(-1);
+      }
+      break;
     case UNKNOWN:
       // not possible because Arg::Unknown returns ARG_ILLEGAL
       // which aborts the parse with an error
@@ -652,20 +724,24 @@ int main(int argc, char **argv)
     if (font_path != "")
     {
       // a font_path could be a real file or a wildcard string
-      boost::filesystem::path dir(font_path);
-      if (boost::filesystem::is_directory(dir) && boost::filesystem::exists(dir))
+      boost::filesystem::path bdir(font_path);
+      if (boost::filesystem::is_directory(bdir) && boost::filesystem::exists(bdir))
       {
         // directory exists
         // search for any ttf files
         std::string extension;
-        for (boost::filesystem::recursive_directory_iterator end, dir(font_path); dir != end; ++dir)
-        {
+        boost::filesystem::recursive_directory_iterator end, dir(font_path);
+        while (dir != end) {
+        // for (boost::filesystem::recursive_directory_iterator end, dir(font_path); dir != end; ++dir)
+        // {
           if (is_regular_file(dir->path()))
           {
             boost::filesystem::path bpath(dir->path());
             extension = bpath.extension().string();
-            if (extension != ".ttf")
+            if (extension != ".ttf") {
+              ++dir;
               continue;
+            }
             // we should check if this font, font-size, index is suitable
             // proportionOfGlyphsMissing
             std::vector<int> this_font_sizes;
@@ -673,8 +749,10 @@ int main(int argc, char **argv)
               if (proportionOfGlyphsMissing(std::string(dir->path().c_str()), 0, fs) < 0.1)
                 this_font_sizes.push_back(fs);
             }
-            if (this_font_sizes.size() == 0)
+            if (this_font_sizes.size() == 0) {
+              ++dir;
               continue; // do not use this font
+            }
 
             font_paths.push_back(dir->path().c_str());
             font_sizes.push_back(this_font_sizes);
@@ -682,6 +760,13 @@ int main(int argc, char **argv)
             std::vector<int> this_face_indexes;
             this_face_indexes.push_back(0);
             face_indexes.push_back(this_face_indexes);
+          }
+          try {
+            ++dir;
+          } catch( const std::exception&  ex) {
+            fprintf(stderr, "Can't enter directory/file: %s, skip.\n", ex.what());
+            //dir.disable_recursion_pending();
+            continue;
           }
         }
       }
@@ -1009,7 +1094,7 @@ int main(int argc, char **argv)
     face_index = face_indexes[idx][idx3];
     if (verbose)
       fprintf(stdout,
-              "Selected a font [%d] from the config file (%lu font%s found). Size is %d. Face "
+              "\nSelected a font [%d] from the config file (%lu font%s found). Size is %d. Face "
               "index is: %d.\n",
               idx, font_paths.size(), font_paths.size() > 1 ? "s" : "", font_size, face_index);
     const char *filename = font_path.c_str(); /* first argument     */
@@ -1030,7 +1115,7 @@ int main(int argc, char **argv)
     //
     bool foundDICOM = false;
     int pickImageIdx;
-    int maxIter = 10;
+    int maxIter = 100;
     while (maxIter > 0)
     {
       pickImageIdx = std::rand() % files.size();
@@ -1095,7 +1180,7 @@ int main(int argc, char **argv)
     // We need to check what the phometric interpretation is. We cannot handle all of them.
     if (pi != gdcm::PhotometricInterpretation::MONOCHROME2)
     {
-      fprintf(stderr, "Warning: We only understand MONOCHROME2, skip this image.\n");
+      fprintf(stderr, "Warning: We only understand MONOCHROME2, skip \"%s\" for this image %s.\n", gdcm::PhotometricInterpretation::GetPIString(pi), files[pickImageIdx].c_str());
       // we could change the interpreation as well
       /*        gdcm::ImageChangePhotometricInterpretation icpi;
          icpi.SetInput(image);
@@ -1180,15 +1265,19 @@ int main(int argc, char **argv)
 
     // apply an image contrast change before using the buffer values
     {
+      float span = current_image_max_value - current_image_min_value;
+      if (span == 0) {
+        span = 1.0f;
+      }
       if (bitsAllocated == 16)
       {
         signed short *bvals = (signed short *)buffer;
-        float new_min = current_image_min_value + ((current_image_max_value - current_image_min_value) * image_contrastx);
-        float new_max = current_image_max_value - ((current_image_max_value - current_image_min_value) * (1.0f - image_contrasty));
+        float new_min = current_image_min_value + ((span) * image_contrastx);
+        float new_max = current_image_max_value - ((span) * (1.0f - image_contrasty));
         // fprintf(stdout, "new min: %f, new_max: %f (old %f %f)\n", new_min, new_max, current_image_min_value, current_image_max_value);
         for (int p = 0; p < xmax * ymax; p++)
         {
-          float A = (bvals[p] - current_image_min_value) / (current_image_max_value - current_image_min_value);
+          float A = (bvals[p] - current_image_min_value) / span;
           float nv = new_min + (A * (new_max - new_min));
           bvals[p] = (signed short)std::max(0.0f, std::min(nv, current_image_max_value));
         }
@@ -1196,12 +1285,12 @@ int main(int argc, char **argv)
       else if (bitsAllocated == 8)
       {
         unsigned char *bvals = (unsigned char *)buffer;
-        float new_min = current_image_min_value + ((current_image_max_value - current_image_min_value) * image_contrastx);
-        float new_max = current_image_max_value - ((current_image_max_value - current_image_min_value) * (1.0f - image_contrasty));
+        float new_min = current_image_min_value + ((span) * image_contrastx);
+        float new_max = current_image_max_value - ((span) * (1.0f - image_contrasty));
         // fprintf(stdout, "new min: %f, new_max: %f (old %f %f)\n", new_min, new_max, current_image_min_value, current_image_max_value);
         for (int p = 0; p < xmax * ymax; p++)
         {
-          float A = (bvals[p] - current_image_min_value) / (current_image_max_value - current_image_min_value);
+          float A = (bvals[p] - current_image_min_value) / (span);
           float nv = new_min + (A * (new_max - new_min));
           bvals[p] = (unsigned char)std::max(0.0f, std::min(nv, current_image_max_value));
         }
@@ -1293,7 +1382,7 @@ int main(int argc, char **argv)
       {                                        // color setting by placement
         int idx = std::rand() % colors.size(); // colors.size() should not be 0
         if (verbose)
-          fprintf(stdout, "  Select color set %d, opacity of background: %f\n", idx, colors[idx][7]);
+          fprintf(stdout, "  Select color set %d, opacity of background: %.2f\n", idx, colors[idx][7]);
         if (colors[idx].size() < 13) {
           fprintf(stderr, "Error: selected a colors entry that does not all variable defined, cancel.\n");
           exit(-1);
@@ -1360,7 +1449,14 @@ int main(int argc, char **argv)
         font_length = (rand() % (lengths_max - lengths_min)) + lengths_min;
         // fprintf(stdout, "FONTLENGTH IS: %d\n", font_length);
 
-        std::vector<std::u32string> text2print = generateRandomText(font_length);
+        // use markov in case we have it
+        std::vector<std::u32string> text2print;
+        std::string text2printSTD;
+        if (markov_model_text_generation.num_states() > 0) {
+          text2printSTD = generateMarkovText(font_length, markov_model_text_generation);  
+        } else {
+          text2print = generateRandomText(font_length);
+        }
         // char *text = strdup(text2print.c_str()); // print the text (no utf-8 here)
         // json = (char *)"text";
         // fprintf(stdout, "  text is now: \"%s\" ScalarType in DICOM: %s\n", text,
@@ -1368,7 +1464,11 @@ int main(int argc, char **argv)
         // if (argc == 4) {
         //  json = argv[3];
         //}
-        num_chars = text2print.size(); // strlen(text);
+        if (markov_model_text_generation.num_states() > 0) {
+          num_chars = text2printSTD.size();
+        } else {
+          num_chars = text2print.size(); // strlen(text);
+        }
         angle = 0;                     // ( 25.0 / 360 ) * 3.14159 * 2;      /* use 25 degrees     */
         target_height = HEIGHT;
 
@@ -1430,7 +1530,11 @@ int main(int argc, char **argv)
           // unsigned long c = FT_Get_Char_Index(face, text2print[n]);
           // error = FT_Load_Glyph(face, c, FT_LOAD_RENDER);
 
-          error = FT_Load_Char(face, text2print[n][0], FT_LOAD_RENDER);
+          if (markov_model_text_generation.num_states() > 0) {
+            error = FT_Load_Char(face, text2printSTD[n], FT_LOAD_RENDER);
+          } else {
+            error = FT_Load_Char(face, text2print[n][0], FT_LOAD_RENDER);
+          }
           if (error)
             continue; /* ignore errors */
 
@@ -1604,6 +1708,9 @@ int main(int argc, char **argv)
         // draw the text
         if (!leaveWithoutText)
         {
+          // in order to scale the color by the vary_percent value we can reduce the alpha_blend value by the percentage relative to zero
+          // vary_percent is ment to have a uniform distribution between the max and (max-vary_percent)
+          float reduce_by = ((double) std::rand() / (RAND_MAX)) * (vary_percent/100.0f);
           if (bitsAllocated == 16)
           {
             signed short *bvals = (signed short *)buffer;
@@ -1628,9 +1735,6 @@ int main(int argc, char **argv)
                 // we need to scale the image_buffer by those values.
                 float f = 0;
                 // float v = (f * bvals[idx]) + ((1.0 - f) * ((1.0 * image_buffer[yi][xi]) / 512.0 * current_image_max_value));
-                // in order to scale the color by the vary_percent value we can reduce the alpha_blend value by the percentage relative to zero
-                // vary_percent is ment to have a uniform distribution between the max and (max-vary_percent)
-                float reduce_by = ((double) std::rand() / (RAND_MAX)) * (vary_percent/100.0f);
                 float v = (1.0f * image_buffer[yi][xi] / 255.0)-reduce_by; // 0 to 1 for color, could be inverted if we have a white background
                 // clamp to 0 to 1
                 v = std::max(0.0f, std::min(1.0f, v));
@@ -1911,7 +2015,9 @@ int main(int argc, char **argv)
   // we should also write a new style dataset.yml file
   std::ofstream out2(output + "/dataset.yaml", std::ofstream::out | std::ofstream::trunc);
   out2 << std::setw(4) << "path: " << output << std::endl;
-  out2 << "train: " << "/with_text/" << std::endl;
+  out2 << "train: " << "with_text/" << std::endl;
+  out2 << "# No split has been performed yet, copy some of the with_text image/txt pairs to the val folder" << std::endl;
+  out2 << "#val: " << "val/" << std::endl;
   out2 << "nc: 1" << std::endl;
   out2 << "names: [ 'foreground' ]" << std::endl;
   out2.close();

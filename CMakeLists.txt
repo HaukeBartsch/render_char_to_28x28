@@ -2,7 +2,7 @@ cmake_minimum_required (VERSION 3.16.0)
 
 project (renderText)
 
-# set (CMAKE_CXX_STANDARD 11)
+#set (CMAKE_CXX_STANDARD 17)
 IF("${CMAKE_SYSTEM}" MATCHES "Linux")
    set (CMAKE_CXX_STANDARD 17)
    SET(CMAKE_CXX_FLAGS "-std=c++2a -I/usr/local/include -I/usr/include")
@@ -10,6 +10,7 @@ ELSE()
    # find the correct path for isysroot with `xcrun --show-sdk-path`
    # /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
    # SET(CMAKE_CXX_FLAGS "-std=c++7 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include")
+   set (CMAKE_CXX_STANDARD 20)
    SET(CMAKE_CXX_FLAGS "-std=c++20 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -I/usr/local/include")
 ENDIF()
 
