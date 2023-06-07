@@ -297,8 +297,8 @@ std::string generateMarkovText(int len, markov_chain &model)
   const std::string delimiter(" ");
   std::vector<std::string> first_words = { "Now", "Then", "Whilst", "She", "He", "It", "Look", "Ah!", "Come", "The", "True", "There" };
   first_words.push_back(model.randomString());
-  first_words.push_back(model.randomString());
-  first_words.push_back(model.randomString());
+  //first_words.push_back(model.randomString());
+  //first_words.push_back(model.randomString());
   std::reverse(first_words.begin(), first_words.end());
 
   std::ostringstream o;
@@ -319,8 +319,6 @@ std::string generateMarkovText(int len, markov_chain &model)
   }
   // get the strings out
   std::string aa(o.str());
-  // can we convert the std::string to 
-
 
   return aa;
 }
@@ -1356,7 +1354,12 @@ int main(int argc, char **argv)
           bvals++;
           it++;
         }
-        write_view(outputfilename, const_view(img), png_tag{});
+        try {
+          write_view(outputfilename, const_view(img), png_tag{});
+        } catch ( const std::exception&  ex ) {
+          fprintf(stderr, "Error: could not write file. Disk full? (%s)\n", ex.what());
+          exit(-1);
+        }
       }
       else if (bitsAllocated == 8)
       {
@@ -1371,7 +1374,12 @@ int main(int argc, char **argv)
           bvals++;
           it++;
         }
-        write_view(outputfilename, const_view(img8), png_tag{});
+        try {
+          write_view(outputfilename, const_view(img8), png_tag{});
+        } catch ( const std::exception&  ex ) {
+          fprintf(stderr, "Error: could not write file. Disk full? (%s)\n", ex.what());
+          exit(-1);
+        }
       }
     }
     // fprintf(stdout, "  dimensions: %d %d, len: %lu\n", xmax, ymax, len);
@@ -1868,7 +1876,7 @@ int main(int argc, char **argv)
     myfile.open (outputfilename);
     for (int bidx = 0; bidx < bboxes.size(); bidx++) {
       if (bboxes[bidx]["class"] != "background") {
-        int label = 1;
+        int label = 0; // only one class, start with zero
         float x_01 = std::int64_t(bboxes[bidx]["x"]) / (xmax-1.0);
         float y_01 = std::int64_t(bboxes[bidx]["y"]) / (ymax-1.0);
         float w_01 = std::int64_t(bboxes[bidx]["width"]) / (xmax-1.0);
